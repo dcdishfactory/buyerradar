@@ -16,7 +16,6 @@ app.use(express.static('public'));
 
 // ─────────────────────────────────────────────────────────────
 // BUYER INTENT PHRASES
-// A post MUST contain one of these to be included in results
 // ─────────────────────────────────────────────────────────────
 const INTENT_PHRASES = [
   'does anyone have',
@@ -51,24 +50,22 @@ const INTENT_PHRASES = [
   'on the hunt for',
 ];
 
-// Strict check — post text must contain a buyer intent phrase AND the item
 function isBuyerPost(text, item) {
-  const t = text.toLowerCase();
-  const itemLower = item.toLowerCase();
-  const hasItem = t.includes(itemLower);
+  const t = ` ${text.toLowerCase()} `;
+  const hasItem = t.includes(item.toLowerCase());
   const hasIntent = INTENT_PHRASES.some(phrase => t.includes(phrase));
   return hasItem && hasIntent;
 }
 
-// ─────────────────────────────────────────────────────────────
-// SHARED HEADERS
-// ─────────────────────────────────────────────────────────────
+function getMatchedPhrase(text) {
+  const t = ` ${text.toLowerCase()} `;
+  return (INTENT_PHRASES.find(p => t.includes(p)) || 'buyer intent').trim();
+}
+
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+  'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
-  'Accept-Encoding': 'gzip, deflate, br',
-  'Connection': 'keep-alive',
 };
 
 function sleep(ms) {
@@ -76,23 +73,11 @@ function sleep(ms) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// REDDIT SCRAPER
-// Searches multiple buyer-intent focused subreddits + general
+// REDDIT — official free JSON API
 // ─────────────────────────────────────────────────────────────
 async function searchReddit(item, location, radius) {
   const results = [];
   const locPart = radius === '100' ? '' : ` ${location}`;
-
-  // These subreddits are specifically for buying/selling/finding items
-  const subreddits = [
-    'findfashion',
-    'whatsthisworth',
-    'buyitforlife',
-    'marketplace',
-    'forsale',
-    'garageforsale',
-    'all',
-  ];
 
   const queries = [
     `"ISO" OR "WTB" OR "looking for" "${item}"${locPart}`,
@@ -106,8 +91,11 @@ async function searchReddit(item, location, radius) {
       const url = `https://www.reddit.com/search.json?q=${encoded}&sort=new&limit=15&type=link`;
 
       const res = await axios.get(url, {
-        headers: { ...HEADERS, 'Accept': 'application/json' },
-        timeout: 8000,
+        headers: {
+          'User-Agent': 'BuyerRadar/1.0 (buyer intent search tool)',
+          'Accept': 'application/json',
+        },
+        timeout: 10000,
       });
 
       const posts = res.data?.data?.children || [];
@@ -115,18 +103,11 @@ async function searchReddit(item, location, radius) {
       posts.forEach(post => {
         const d = post.data;
         const fullText = `${d.title} ${d.selftext || ''}`;
-
         if (!d.permalink) return;
+
         const postUrl = `https://reddit.com${d.permalink}`;
         if (results.find(r => r.url === postUrl)) return;
-
-        // Strict buyer intent check
         if (!isBuyerPost(fullText, item)) return;
-
-        // Find which phrase matched
-        const matchedPhrase = INTENT_PHRASES.find(p =>
-          fullText.toLowerCase().includes(p)
-        ) || 'buyer intent';
 
         results.push({
           url: postUrl,
@@ -134,13 +115,13 @@ async function searchReddit(item, location, radius) {
           snippet: d.selftext ? d.selftext.slice(0, 200) : `r/${d.subreddit} · ${d.score} upvotes`,
           platform: 'Reddit',
           color: '#ff6314',
-          phraseLabel: matchedPhrase.trim(),
+          phraseLabel: getMatchedPhrase(fullText),
         });
       });
 
-      await sleep(300);
+      await sleep(500);
     } catch (err) {
-      console.error(`Reddit error:`, err.message);
+      console.error('Reddit error:', err.message);
     }
   }
 
@@ -148,9 +129,7 @@ async function searchReddit(item, location, radius) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CRAIGSLIST SCRAPER
-// Only searches the "wanted" (wan) section — these are ALL
-// posts from people looking to BUY something
+// CRAIGSLIST — RSS feeds (reliable, no blocking)
 // ─────────────────────────────────────────────────────────────
 async function searchCraigslist(item, location, radius) {
   const results = [];
@@ -185,29 +164,32 @@ async function searchCraigslist(item, location, radius) {
 
   try {
     const query = encodeURIComponent(item);
-    // /search/wan = "wanted" section only — these are buyers by definition
-    const url = `https://${subdomain}.craigslist.org/search/wan?query=${query}&sort=date`;
+    // RSS feed for wanted section — all posts here are buyers by definition
+    const url = `https://${subdomain}.craigslist.org/search/wan?query=${query}&format=rss`;
 
-    const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
-    const $ = cheerio.load(res.data);
+    const res = await axios.get(url, {
+      headers: { ...HEADERS, 'Accept': 'application/rss+xml, application/xml, text/xml' },
+      timeout: 10000,
+    });
 
-    $('li.cl-search-result, .result-row').each((i, el) => {
+    const $ = cheerio.load(res.data, { xmlMode: true });
+
+    $('item').each((i, el) => {
       if (results.length >= 15) return;
-      const titleEl = $(el).find('.cl-app-anchor, a.result-title, .titlestring');
-      const title = titleEl.text().trim();
-      const href = titleEl.attr('href');
-      if (!title || !href) return;
 
-      // Extra check — title must mention the item
-      if (!title.toLowerCase().includes(item.toLowerCase())) return;
+      const title = $(el).find('title').first().text().trim();
+      const link = $(el).find('link').first().text().trim();
+      const description = $(el).find('description').first().text().trim();
 
-      const fullUrl = href.startsWith('http') ? href : `https://${subdomain}.craigslist.org${href}`;
-      if (results.find(r => r.url === fullUrl)) return;
+      if (!title || !link) return;
+      const combined = `${title} ${description}`;
+      if (!combined.toLowerCase().includes(item.toLowerCase())) return;
+      if (results.find(r => r.url === link)) return;
 
       results.push({
-        url: fullUrl,
+        url: link,
         title,
-        snippet: 'Craigslist WANTED post — this person is looking to buy',
+        snippet: description ? description.slice(0, 200) : 'Craigslist WANTED post — this person is looking to buy',
         platform: 'Craigslist',
         color: '#a855f7',
         phraseLabel: 'craigslist wanted',
@@ -215,15 +197,14 @@ async function searchCraigslist(item, location, radius) {
     });
 
   } catch (err) {
-    console.error('Craigslist error:', err.message);
+    console.error('Craigslist RSS error:', err.message);
   }
 
   return results;
 }
 
 // ─────────────────────────────────────────────────────────────
-// X (TWITTER) SCRAPER
-// Only pulls tweets with explicit buyer intent phrases
+// X (TWITTER) — via Nitter public instances
 // ─────────────────────────────────────────────────────────────
 async function searchX(item, location, radius) {
   const results = [];
@@ -232,22 +213,23 @@ async function searchX(item, location, radius) {
     'https://nitter.privacydev.net',
     'https://nitter.poast.org',
     'https://nitter.1d4.us',
+    'https://nitter.space',
   ];
 
   const locPart = radius === '100' ? '' : ` "${location}"`;
 
-  // Only search for explicit buyer intent phrases
   const intentQueries = [
     `"ISO" "${item}"${locPart}`,
     `"WTB" "${item}"${locPart}`,
     `"looking for" "${item}"${locPart}`,
     `"want to buy" "${item}"${locPart}`,
-    `"in search of" "${item}"${locPart}`,
     `"does anyone have" "${item}"${locPart}`,
   ];
 
   for (const instance of nitterInstances) {
-    for (const q of intentQueries.slice(0, 3)) {
+    let instanceWorking = false;
+
+    for (const q of intentQueries) {
       try {
         const query = encodeURIComponent(q);
         const url = `${instance}/search?f=tweets&q=${query}`;
@@ -255,21 +237,20 @@ async function searchX(item, location, radius) {
         const res = await axios.get(url, { headers: HEADERS, timeout: 8000 });
         const $ = cheerio.load(res.data);
 
-        $('.timeline-item, .tweet-body').each((i, el) => {
-          if (results.length >= 10) return;
+        const items = $('.timeline-item, .tweet-body');
+        if (items.length === 0) continue;
+
+        instanceWorking = true;
+
+        items.each((i, el) => {
+          if (results.length >= 12) return;
           const text = $(el).find('.tweet-content, .content').text().trim();
           const link = $(el).find('a.tweet-link, .tweet-date a').attr('href');
           if (!text || !link) return;
-
-          // Strict buyer intent check
           if (!isBuyerPost(text, item)) return;
 
           const fullUrl = `https://x.com${link.replace(/^\/[^/]+/, '')}`;
           if (results.find(r => r.url === fullUrl)) return;
-
-          const matchedPhrase = INTENT_PHRASES.find(p =>
-            text.toLowerCase().includes(p)
-          ) || 'buyer intent';
 
           results.push({
             url: fullUrl,
@@ -277,7 +258,7 @@ async function searchX(item, location, radius) {
             snippet: text.slice(0, 200),
             platform: 'X (Twitter)',
             color: '#e7e7e7',
-            phraseLabel: matchedPhrase.trim(),
+            phraseLabel: getMatchedPhrase(text),
           });
         });
 
@@ -287,119 +268,26 @@ async function searchX(item, location, radius) {
       }
     }
 
-    if (results.length > 0) break;
+    if (instanceWorking) break;
   }
 
   return results;
 }
 
 // ─────────────────────────────────────────────────────────────
-// OFFERUP SCRAPER
-// Searches OfferUp — filters to only "wanted/looking" posts
-// ─────────────────────────────────────────────────────────────
-async function searchOfferUp(item, location, radius) {
-  const results = [];
-
-  try {
-    const query = encodeURIComponent(item);
-    const url = `https://offerup.com/search/?q=${query}`;
-
-    const res = await axios.get(url, {
-      headers: { ...HEADERS, 'Referer': 'https://offerup.com/' },
-      timeout: 10000,
-    });
-
-    const $ = cheerio.load(res.data);
-
-    $('a[href*="/item/detail/"]').each((i, el) => {
-      if (results.length >= 10) return;
-      const href = $(el).attr('href');
-      const title = $(el).find('p, span, div').first().text().trim() ||
-                    $(el).attr('aria-label') || '';
-      if (!href || !title) return;
-
-      // Must mention the item
-      if (!title.toLowerCase().includes(item.toLowerCase())) return;
-
-      const fullUrl = href.startsWith('http') ? href : `https://offerup.com${href}`;
-      if (results.find(r => r.url === fullUrl)) return;
-
-      results.push({
-        url: fullUrl,
-        title,
-        snippet: 'OfferUp listing — click to view',
-        platform: 'OfferUp',
-        color: '#00ff88',
-        phraseLabel: 'offerup wanted',
-      });
-    });
-
-  } catch (err) {
-    console.error('OfferUp error:', err.message);
-  }
-
-  return results;
-}
-
-// ─────────────────────────────────────────────────────────────
-// NEXTDOOR SCRAPER
-// Uses Google to find Nextdoor posts with buyer intent
-// ─────────────────────────────────────────────────────────────
-async function searchNextdoor(item, location, radius) {
-  const results = [];
-  const locPart = radius === '100' ? '' : ` "${location}"`;
-
-  try {
-    // Force buyer intent phrases into the Google query
-    const intentPart = `("ISO" OR "WTB" OR "looking for" OR "want to buy" OR "in search of" OR "does anyone have")`;
-    const query = encodeURIComponent(
-      `site:nextdoor.com ${intentPart} "${item}"${locPart}`
-    );
-    const url = `https://www.google.com/search?q=${query}&num=10&tbs=qdr:m`;
-
-    const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
-    const $ = cheerio.load(res.data);
-
-    $('div.g, div[data-hveid]').each((i, el) => {
-      if (results.length >= 8) return;
-      const title = $(el).find('h3').first().text().trim();
-      const href = $(el).find('a').first().attr('href');
-      const snippet = $(el).find('.VwiC3b, .st').first().text().trim();
-
-      if (!title || !href || !href.includes('nextdoor.com')) return;
-      if (results.find(r => r.url === href)) return;
-
-      // Check snippet or title for buyer intent
-      const combinedText = `${title} ${snippet}`;
-      if (!isBuyerPost(combinedText, item)) return;
-
-      results.push({
-        url: href,
-        title,
-        snippet: snippet || 'Nextdoor post — click to view',
-        platform: 'Nextdoor',
-        color: '#f472b6',
-        phraseLabel: 'nextdoor wanted',
-      });
-    });
-
-  } catch (err) {
-    console.error('Nextdoor error:', err.message);
-  }
-
-  return results;
-}
-
-// ─────────────────────────────────────────────────────────────
-// GOOGLE SCRAPER
-// Only pulls pages where someone is explicitly looking to buy
+// GOOGLE — via SerpApi
 // ─────────────────────────────────────────────────────────────
 async function searchGoogle(item, location, radius) {
   const results = [];
+
+  if (!process.env.SERPAPI_KEY) {
+    console.error('SERPAPI_KEY not set — skipping Google');
+    return results;
+  }
+
   const locPart = radius === '100' ? '' : ` "${location}"`;
   const exclude = '-site:reddit.com -site:craigslist.org -site:x.com -site:twitter.com -site:offerup.com -site:nextdoor.com';
 
-  // Each query forces a specific buyer intent phrase
   const intentQueries = [
     `"ISO" "${item}"${locPart} ${exclude}`,
     `"WTB" "${item}"${locPart} ${exclude}`,
@@ -411,43 +299,91 @@ async function searchGoogle(item, location, radius) {
 
   for (const q of intentQueries) {
     try {
-      const query = encodeURIComponent(q);
-      const url = `https://www.google.com/search?q=${query}&num=10&tbs=qdr:m`;
+      const params = new URLSearchParams({
+        api_key: process.env.SERPAPI_KEY,
+        engine: 'google',
+        q,
+        num: '10',
+        tbs: 'qdr:m',
+        gl: 'us',
+        hl: 'en',
+      });
 
-      const res = await axios.get(url, { headers: HEADERS, timeout: 10000 });
-      const $ = cheerio.load(res.data);
+      const url = `https://serpapi.com/search.json?${params.toString()}`;
+      const res = await axios.get(url, { timeout: 10000 });
 
-      $('div.g, div[data-hveid]').each((i, el) => {
-        if (results.length >= 12) return;
-        const title = $(el).find('h3').first().text().trim();
-        const href = $(el).find('a').first().attr('href');
-        const snippet = $(el).find('.VwiC3b, .st').first().text().trim();
+      if (res.data.error) {
+        console.error('SerpApi error:', res.data.error);
+        continue;
+      }
 
-        if (!title || !href || !href.startsWith('http')) return;
-        if (results.find(r => r.url === href)) return;
-
-        // Strict check on title + snippet
-        const combinedText = `${title} ${snippet}`;
-        if (!isBuyerPost(combinedText, item)) return;
-
-        const matchedPhrase = INTENT_PHRASES.find(p =>
-          combinedText.toLowerCase().includes(p)
-        ) || 'buyer intent';
+      (res.data.organic_results || []).forEach(r => {
+        if (!r.link || results.find(x => x.url === r.link)) return;
+        const combined = `${r.title || ''} ${r.snippet || ''}`;
+        if (!isBuyerPost(combined, item)) return;
 
         results.push({
-          url: href,
-          title,
-          snippet: snippet || '',
+          url: r.link,
+          title: r.title || 'View Post',
+          snippet: r.snippet || '',
           platform: 'Google',
           color: '#00d4ff',
-          phraseLabel: matchedPhrase.trim(),
+          phraseLabel: getMatchedPhrase(combined),
         });
       });
 
-      await sleep(400);
+      await sleep(300);
     } catch (err) {
-      console.error(`Google error:`, err.message);
+      console.error('SerpApi error:', err.message);
     }
+  }
+
+  return results;
+}
+
+// ─────────────────────────────────────────────────────────────
+// NEXTDOOR — via SerpApi
+// ─────────────────────────────────────────────────────────────
+async function searchNextdoor(item, location, radius) {
+  const results = [];
+
+  if (!process.env.SERPAPI_KEY) return results;
+
+  const locPart = radius === '100' ? '' : ` "${location}"`;
+
+  try {
+    const q = `site:nextdoor.com ("ISO" OR "WTB" OR "looking for" OR "want to buy" OR "in search of" OR "does anyone have") "${item}"${locPart}`;
+
+    const params = new URLSearchParams({
+      api_key: process.env.SERPAPI_KEY,
+      engine: 'google',
+      q,
+      num: '10',
+      tbs: 'qdr:m',
+      gl: 'us',
+      hl: 'en',
+    });
+
+    const res = await axios.get(`https://serpapi.com/search.json?${params.toString()}`, { timeout: 10000 });
+
+    (res.data.organic_results || []).forEach(r => {
+      if (!r.link || !r.link.includes('nextdoor.com')) return;
+      if (results.find(x => x.url === r.link)) return;
+      const combined = `${r.title || ''} ${r.snippet || ''}`;
+      if (!isBuyerPost(combined, item)) return;
+
+      results.push({
+        url: r.link,
+        title: r.title || 'Nextdoor Post',
+        snippet: r.snippet || 'Nextdoor post — click to view',
+        platform: 'Nextdoor',
+        color: '#f472b6',
+        phraseLabel: getMatchedPhrase(combined),
+      });
+    });
+
+  } catch (err) {
+    console.error('Nextdoor/SerpApi error:', err.message);
   }
 
   return results;
@@ -466,11 +402,10 @@ app.post('/api/search', async (req, res) => {
   console.log(`\n◉ Scanning for buyers of "${item}" near ${location} (${radius} mi)`);
 
   try {
-    const [reddit, craigslist, x, offerup, nextdoor, google] = await Promise.allSettled([
+    const [reddit, craigslist, x, nextdoor, google] = await Promise.allSettled([
       searchReddit(item, location, radius),
       searchCraigslist(item, location, radius),
       searchX(item, location, radius),
-      searchOfferUp(item, location, radius),
       searchNextdoor(item, location, radius),
       searchGoogle(item, location, radius),
     ]);
@@ -481,7 +416,6 @@ app.post('/api/search', async (req, res) => {
       ...extract(reddit),
       ...extract(craigslist),
       ...extract(x),
-      ...extract(offerup),
       ...extract(nextdoor),
       ...extract(google),
     ];
@@ -501,7 +435,7 @@ app.post('/api/search', async (req, res) => {
         Reddit: extract(reddit).length,
         Craigslist: extract(craigslist).length,
         'X (Twitter)': extract(x).length,
-        OfferUp: extract(offerup).length,
+        OfferUp: 0,
         Nextdoor: extract(nextdoor).length,
         Google: extract(google).length,
       }
@@ -519,8 +453,8 @@ app.post('/api/search', async (req, res) => {
 app.get('/api/health', (req, res) => {
   res.json({
     status: 'ok',
-    message: 'BuyerRadar backend running — strict buyer intent mode',
-    platforms: ['Reddit', 'Craigslist', 'X (Twitter)', 'OfferUp', 'Nextdoor', 'Google'],
+    message: 'BuyerRadar backend running',
+    platforms: ['Reddit', 'Craigslist', 'X (Twitter)', 'Nextdoor', 'Google'],
   });
 });
 
