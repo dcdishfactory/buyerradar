@@ -317,7 +317,7 @@ async function startScan() {
   addLog('◈', 'All 6 platforms queued — awaiting results...', 'c-ok');
  
   try {
-    const res = await fetch('http://localhost:3000/api/search', {
+    const res = await fetch('https://buyerradar.up.railway.app/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item, location: loc, radius }),
