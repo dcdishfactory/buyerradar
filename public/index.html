@@ -1,0 +1,381 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>BuyerRadar</title>
+<link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@700;800&family=Share+Tech+Mono&family=Rajdhani:wght@400;600&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{
+  background:#04080f;
+  background-image:
+    radial-gradient(ellipse at 20% 40%,rgba(0,30,80,.4) 0%,transparent 55%),
+    linear-gradient(rgba(0,212,255,.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,.03) 1px,transparent 1px);
+  background-size:auto,32px 32px,32px 32px;
+  background-attachment:fixed;
+  color:rgba(180,230,255,.9);
+  font-family:'Rajdhani',sans-serif;
+  min-height:100vh;
+  padding:36px 16px 80px;
+}
+.wrap{max-width:760px;margin:0 auto}
+.panel{
+  position:relative;
+  background:linear-gradient(135deg,#0a1628,#060d1a);
+  border:1px solid rgba(0,212,255,.22);
+  box-shadow:inset 0 1px 0 rgba(0,212,255,.09),0 6px 28px rgba(0,0,0,.65);
+  padding:22px 26px;
+  margin-bottom:14px;
+  overflow:hidden;
+}
+.panel::before{content:'';position:absolute;top:-1px;left:-1px;width:14px;height:14px;border-top:2px solid #00d4ff;border-left:2px solid #00d4ff}
+.panel::after {content:'';position:absolute;top:-1px;right:-1px;width:14px;height:14px;border-top:2px solid #00d4ff;border-right:2px solid #00d4ff}
+.bl::before{content:'';position:absolute;bottom:-1px;left:-1px;width:14px;height:14px;border-bottom:2px solid #00d4ff;border-left:2px solid #00d4ff}
+.br::after {content:'';position:absolute;bottom:-1px;right:-1px;width:14px;height:14px;border-bottom:2px solid #00d4ff;border-right:2px solid #00d4ff}
+h1{font-family:'Orbitron',sans-serif;font-size:clamp(1.7rem,5vw,2.5rem);font-weight:800;letter-spacing:.08em;color:#00d4ff;text-shadow:0 0 12px rgba(0,212,255,.9),0 0 32px rgba(0,212,255,.35);animation:flicker 9s infinite}
+h1 span{color:#00ff88;text-shadow:0 0 12px rgba(0,255,136,.9)}
+.sub{margin-top:5px;font-size:11px;letter-spacing:.16em;text-transform:uppercase;color:rgba(100,180,220,.5);font-family:'Share Tech Mono',monospace}
+.tagline{margin-top:10px;font-size:12px;color:rgba(0,255,136,.6);font-family:'Share Tech Mono',monospace;letter-spacing:.07em;padding:8px 12px;border-left:2px solid rgba(0,255,136,.35);background:rgba(0,255,136,.04)}
+.orbs{display:flex;gap:8px;align-items:center;margin-top:16px;padding-top:12px;border-top:1px solid rgba(0,212,255,.1)}
+.orb{width:11px;height:11px;border-radius:50%;flex-shrink:0;animation:pulse 2.5s ease-in-out infinite}
+.fl{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:rgba(0,212,255,.45);display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid rgba(0,212,255,.12)}
+.bar{width:5px;height:14px;flex-shrink:0}
+.row{display:flex;gap:12px;flex-wrap:wrap;margin-bottom:12px}
+.field{flex:1;min-width:140px}
+label{display:block;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:rgba(0,212,255,.5);margin-bottom:5px}
+.lhint{font-size:9px;color:rgba(0,255,136,.4);text-transform:none;letter-spacing:.04em;font-style:italic}
+input[type=text]{width:100%;background:transparent;border:none;border-bottom:1px solid rgba(0,212,255,.28);outline:none;color:rgba(180,230,255,.95);font-family:'Share Tech Mono',monospace;font-size:13px;padding:5px 0 7px;caret-color:#00d4ff;transition:border-color .2s}
+input[type=text]::placeholder{color:rgba(0,100,140,.38)}
+input[type=text]:focus{border-bottom-color:#00d4ff}
+select{width:100%;background:#060d1a;border:none;border-bottom:1px solid rgba(0,212,255,.28);outline:none;color:rgba(180,230,255,.85);font-family:'Share Tech Mono',monospace;font-size:12px;padding:5px 0 7px;cursor:pointer;-webkit-appearance:none;appearance:none}
+select option{background:#060d1a}
+.btn-main{width:100%;margin-top:6px;padding:13px;background:linear-gradient(135deg,#003d5c,#001d36,#002d4a);border:1px solid rgba(0,212,255,.4);color:#00d4ff;font-family:'Orbitron',sans-serif;font-size:11px;font-weight:700;letter-spacing:.22em;text-transform:uppercase;cursor:pointer;transition:all .2s;box-shadow:0 0 14px rgba(0,212,255,.1)}
+.btn-main:hover:not(:disabled){background:linear-gradient(135deg,#005070,#002040,#003a5a);box-shadow:0 0 24px rgba(0,212,255,.3)}
+.btn-main:disabled{opacity:.3;cursor:not-allowed}
+.g{color:#00ff88;margin:0 5px}
+#scanPanel{display:none}
+.prog-wrap{height:3px;background:rgba(0,212,255,.1);margin:12px 0 14px;overflow:hidden}
+.prog-bar{height:3px;background:linear-gradient(90deg,#00d4ff,#00ff88);width:0%;transition:width .4s ease;box-shadow:0 0 8px #00d4ff}
+.log-line{font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.07em;padding:5px 0;border-bottom:1px solid rgba(0,212,255,.06);display:flex;align-items:flex-start;gap:9px;line-height:1.6}
+.log-line:last-child{border-bottom:none}
+.spin{display:inline-block;animation:spin 1s linear infinite;flex-shrink:0}
+.c-ok  {color:#00ff88;flex-shrink:0}
+.c-err {color:#ff4040;flex-shrink:0}
+.c-wait{color:rgba(0,212,255,.45);flex-shrink:0}
+.c-dim {color:rgba(0,212,255,.22);flex-shrink:0}
+#resultsPanel{display:none}
+.res-meta{display:flex;justify-content:space-between;flex-wrap:wrap;gap:6px;font-family:'Share Tech Mono',monospace;font-size:10px;text-transform:uppercase;letter-spacing:.12em;margin-bottom:14px;padding-bottom:8px;border-bottom:1px solid rgba(0,212,255,.12)}
+.res-meta .l{color:rgba(0,212,255,.4)}
+.res-meta .r{color:rgba(0,255,136,.7)}
+.pgrp{margin-bottom:10px}
+.pgrp-hdr{display:flex;align-items:center;gap:10px;padding:9px 14px;border:1px solid rgba(0,212,255,.16);background:linear-gradient(135deg,#0d1e38,#080f1e);cursor:pointer;user-select:none;transition:border-color .2s;position:relative;overflow:hidden}
+.pgrp-hdr::before{content:'';position:absolute;top:0;left:0;width:7px;height:7px;border-top:1px solid rgba(0,212,255,.4);border-left:1px solid rgba(0,212,255,.4)}
+.pgrp-hdr:hover{border-color:rgba(0,212,255,.38)}
+.pgrp-name{font-family:'Share Tech Mono',monospace;font-size:11px;letter-spacing:.13em;text-transform:uppercase;flex:1}
+.pgrp-cnt{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,255,136,.65)}
+.pgrp-chev{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,212,255,.3);transition:transform .2s}
+.pgrp-hdr.open .pgrp-chev{transform:rotate(90deg)}
+.pgrp-body{display:none}
+.pgrp-body.open{display:block}
+.post-card{border-left:1px solid rgba(0,212,255,.1);border-right:1px solid rgba(0,212,255,.1);border-bottom:1px solid rgba(0,212,255,.07);overflow:hidden}
+.post-top{display:flex;align-items:center;gap:8px;padding:5px 14px;background:rgba(0,0,0,.2);flex-wrap:wrap}
+.post-tag{font-family:'Share Tech Mono',monospace;font-size:9px;letter-spacing:.07em;padding:2px 7px;border:1px solid;text-transform:uppercase;flex-shrink:0}
+.post-phrase{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,255,136,.4);letter-spacing:.04em}
+a.post-link{display:block;padding:11px 14px;text-decoration:none;background:rgba(0,0,0,.22);transition:all .17s;border-left:3px solid transparent}
+a.post-link:hover{background:rgba(0,212,255,.05);border-left-color:#00d4ff}
+.post-title{font-size:14px;font-weight:600;color:rgba(205,238,255,.9);margin-bottom:4px;line-height:1.4}
+.post-snip{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(0,212,255,.38);line-height:1.75;margin-bottom:6px}
+.post-snip em{color:rgba(0,255,136,.8);font-style:normal;font-weight:700}
+.post-url{font-family:'Share Tech Mono',monospace;font-size:9px;color:rgba(0,212,255,.22);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.no-res{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(255,160,0,.6);padding:16px;border:1px solid rgba(255,160,0,.2);background:rgba(255,160,0,.04);letter-spacing:.06em;line-height:2}
+.foot{text-align:center;margin-top:24px;font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.14em;color:rgba(0,212,255,.12)}
+@keyframes pulse{0%,100%{box-shadow:0 0 6px rgba(0,255,136,.6),0 0 14px rgba(0,255,136,.2)}50%{box-shadow:0 0 16px rgba(0,255,136,1),0 0 30px rgba(0,255,136,.55)}}
+@keyframes flicker{0%,100%{opacity:1}92%{opacity:1}93%{opacity:.72}94%{opacity:1}96%{opacity:.82}97%{opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+ 
+<!-- HEADER -->
+<div class="panel bl br">
+  <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid rgba(0,212,255,.12)">
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(0,212,255,.35)">SYS.v5.0 // BUYERRADAR</span>
+    <div style="display:flex;gap:6px">
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#ff6314,#aa3308)"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#a855f7,#6622cc);animation-delay:.4s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00ff88,#008844);animation-delay:.8s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#f472b6,#cc2678);animation-delay:1.2s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.6s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:2s"></div>
+    </div>
+  </div>
+  <h1>BUYER<span>RADAR</span></h1>
+  <p class="sub">LIVE BUYER POST SCANNER · LOCAL RADIUS · 6 PLATFORMS · A product by Devin Backman</p>
+  <p class="tagline">▸ Enter what you're selling. We find real posts where people say "I'm looking for this."</p>
+  <div class="orbs">
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#ff6314,#aa3308)"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#a855f7,#6622cc);animation-delay:.4s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00ff88,#008844);animation-delay:.8s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#f472b6,#cc2678);animation-delay:1.2s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.6s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:2s"></div>
+    <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(0,212,255,.25),transparent);margin-left:6px"></div>
+  </div>
+</div>
+ 
+<!-- SEARCH FORM -->
+<div class="panel bl br">
+  <div class="fl">
+    <div class="bar" style="background:#00ff88;box-shadow:0 0 6px #00ff88"></div>
+    WHAT ARE YOU SELLING?
+  </div>
+  <div class="row">
+    <div class="field">
+      <label>▸ Your Location <span class="lhint">(city + state, or ZIP code)</span></label>
+      <input type="text" id="loc" placeholder="e.g. San Bernardino, CA" autocomplete="off" oninput="checkReady()">
+    </div>
+    <div class="field" style="flex:1.5">
+      <label>▸ Item You're Selling</label>
+      <input type="text" id="itm" placeholder="e.g. skateboard, guitar, camera" autocomplete="off" oninput="checkReady()">
+    </div>
+    <div class="field" style="flex:.65;min-width:110px">
+      <label>▸ Radius</label>
+      <select id="radius">
+        <option value="10">10 miles</option>
+        <option value="20">20 miles</option>
+        <option value="30" selected>30 miles</option>
+        <option value="50">50 miles</option>
+        <option value="100">Nationwide</option>
+      </select>
+    </div>
+  </div>
+  <button class="btn-main" id="scanBtn" disabled onclick="startScan()">
+    <span class="g">◉</span>SCAN FOR BUYERS<span class="g">◉</span>
+  </button>
+</div>
+ 
+<!-- SCAN PROGRESS -->
+<div class="panel bl br" id="scanPanel">
+  <div class="fl">
+    <div class="bar" style="background:#00d4ff;box-shadow:0 0 6px #00d4ff"></div>
+    <span id="scanTitle" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.1em">SCANNING...</span>
+  </div>
+  <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
+  <div id="logLines"></div>
+</div>
+ 
+<!-- RESULTS -->
+<div class="panel bl br" id="resultsPanel">
+  <div class="fl">
+    <div class="bar" style="background:#00ff88;box-shadow:0 0 6px #00ff88"></div>
+    <span id="resLabel" style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.1em;color:rgba(0,212,255,.45)"></span>
+  </div>
+  <div class="res-meta">
+    <span class="l">◈ LIVE BUYER POSTS</span>
+    <span class="r" id="resCount"></span>
+  </div>
+  <div id="resBody"></div>
+</div>
+ 
+<div class="foot">◈ A product by Devin Backman // v5.0.0 ◈</div>
+</div>
+ 
+<script>
+// ══════════════════════════════════════════════════════════════
+// BUYERRADAR FRONTEND v5.0 — talks to local backend
+// ══════════════════════════════════════════════════════════════
+ 
+function hl(text, item) {
+  if (!text || !item) return text || '';
+  const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  return text.replace(new RegExp(`(${escaped})`, 'gi'), '<em>$1</em>');
+}
+ 
+function renderResults(posts, item) {
+  const body = document.getElementById('resBody');
+  body.innerHTML = '';
+ 
+  if (!posts.length) {
+    body.innerHTML = `<div class="no-res">
+      ◈ No buyer posts found for this search.<br><br>
+      Suggestions:<br>
+      · Try a simpler item name (e.g. "guitar" instead of "Fender Stratocaster")<br>
+      · Try just the city name without state<br>
+      · Select a larger radius or Nationwide<br>
+      · Some platforms restrict posts from appearing in search results
+    </div>`;
+    document.getElementById('resCount').textContent = '0 POSTS FOUND';
+    return;
+  }
+ 
+  document.getElementById('resCount').textContent =
+    `${posts.length} BUYER POST${posts.length !== 1 ? 'S' : ''} FOUND`;
+ 
+  const groups = {};
+  posts.forEach(p => {
+    if (!groups[p.platform]) groups[p.platform] = [];
+    groups[p.platform].push(p);
+  });
+ 
+  Object.entries(groups).forEach(([platformName, plist]) => {
+    const color = plist[0].color;
+    const wrap = document.createElement('div');
+    wrap.className = 'pgrp';
+ 
+    const hdr = document.createElement('div');
+    hdr.className = 'pgrp-hdr open';
+    hdr.innerHTML =
+      `<div style="width:10px;height:10px;border-radius:50%;background:${color};box-shadow:0 0 9px ${color}bb;flex-shrink:0"></div>` +
+      `<span class="pgrp-name" style="color:${color}">${platformName}</span>` +
+      `<span class="pgrp-cnt">${plist.length} POST${plist.length !== 1 ? 'S' : ''}</span>` +
+      `<span class="pgrp-chev">▶</span>`;
+ 
+    const bdy = document.createElement('div');
+    bdy.className = 'pgrp-body open';
+ 
+    plist.forEach(post => {
+      const card = document.createElement('div');
+      card.className = 'post-card';
+      const shortUrl = post.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 85);
+ 
+      card.innerHTML =
+        `<div class="post-top">` +
+          `<span class="post-tag" style="color:${color};border-color:${color}55;background:${color}11">${platformName}</span>` +
+          `<span class="post-phrase">matched: "${post.phraseLabel}"</span>` +
+        `</div>` +
+        `<a class="post-link" href="${post.url}" target="_blank" rel="noopener noreferrer">` +
+          `<div class="post-title">${hl(post.title, item)}</div>` +
+          (post.snippet ? `<div class="post-snip">${hl(post.snippet, item)}</div>` : '') +
+          `<div class="post-url">↗ ${shortUrl}</div>` +
+        `</a>`;
+ 
+      bdy.appendChild(card);
+    });
+ 
+    hdr.onclick = () => {
+      const isOpen = bdy.classList.contains('open');
+      bdy.classList.toggle('open', !isOpen);
+      hdr.classList.toggle('open', !isOpen);
+    };
+ 
+    wrap.appendChild(hdr);
+    wrap.appendChild(bdy);
+    body.appendChild(wrap);
+  });
+}
+ 
+function addLog(iconHtml, text, cls) {
+  const d = document.createElement('div');
+  d.className = 'log-line';
+  d.innerHTML = `<span class="${cls || 'c-wait'}">${iconHtml}</span><span>${text}</span>`;
+  document.getElementById('logLines').appendChild(d);
+  d.scrollIntoView({ block: 'nearest' });
+  return d;
+}
+ 
+function setProgress(pct) {
+  document.getElementById('progBar').style.width = pct + '%';
+}
+ 
+let scanning = false;
+ 
+async function startScan() {
+  if (scanning) return;
+ 
+  const loc    = document.getElementById('loc').value.trim();
+  const item   = document.getElementById('itm').value.trim();
+  const radius = document.getElementById('radius').value;
+  if (!loc || !item) return;
+ 
+  scanning = true;
+  document.getElementById('scanBtn').disabled = true;
+  document.getElementById('scanBtn').innerHTML =
+    '<span class="g">◉</span>SCANNING...<span class="g">◉</span>';
+ 
+  const sp = document.getElementById('scanPanel');
+  sp.style.display = 'block';
+  document.getElementById('logLines').innerHTML = '';
+  document.getElementById('resultsPanel').style.display = 'none';
+  setProgress(0);
+ 
+  document.getElementById('scanTitle').textContent =
+    `SCANNING: "${item.toUpperCase()}" · ` +
+    (radius === '100' ? 'NATIONWIDE' : `${loc.toUpperCase()} · ${radius} MI RADIUS`);
+  sp.scrollIntoView({ behavior: 'smooth', block: 'start' });
+ 
+  const platforms = ['Reddit', 'Craigslist', 'X (Twitter)', 'OfferUp', 'Nextdoor', 'Google'];
+  const lines = {};
+  platforms.forEach((p, i) => {
+    lines[p] = addLog('<span class="spin">◌</span>', `[${p}] Scanning for buyers...`, 'c-wait');
+    setProgress(5 + i * 10);
+  });
+ 
+  setProgress(20);
+  addLog('◈', 'All 6 platforms queued — awaiting results...', 'c-ok');
+ 
+  try {
+    const res = await fetch('http://localhost:3000/api/search', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ item, location: loc, radius }),
+    });
+ 
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.error || `Server error ${res.status}`);
+    }
+ 
+    const data = await res.json();
+    setProgress(100);
+ 
+    platforms.forEach(p => {
+      const count = data.counts?.[p] || 0;
+      if (count > 0) {
+        lines[p].innerHTML =
+          `<span class="c-ok">✓</span>` +
+          `<span>[${p}] — <span style="color:#00ff88">${count} buyer post${count !== 1 ? 's' : ''} found</span></span>`;
+      } else {
+        lines[p].innerHTML =
+          `<span class="c-dim">◦</span>` +
+          `<span class="c-dim">[${p}] — no posts found</span>`;
+      }
+    });
+ 
+    const found = data.results.length;
+    document.getElementById('scanTitle').textContent =
+      `SCAN COMPLETE — ${found} UNIQUE BUYER POST${found !== 1 ? 'S' : ''} FOUND`;
+    addLog('◈',
+      `Done. ${found} unique buyer posts surfaced. Click any result to open the original post.`,
+      'c-ok');
+ 
+    document.getElementById('resLabel').textContent =
+      `SELLING: ${item.toUpperCase()} · ` +
+      (radius === '100' ? 'NATIONWIDE' : `NEAR: ${loc.toUpperCase()} · ${radius} MI`);
+    document.getElementById('resultsPanel').style.display = 'block';
+    renderResults(data.results, item);
+    document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
+ 
+  } catch (err) {
+    setProgress(100);
+    addLog('✗', `Error: ${err.message}`, 'c-err');
+    addLog('◈', 'Make sure the backend server is running (node server.js)', 'c-dim');
+  }
+ 
+  scanning = false;
+  document.getElementById('scanBtn').innerHTML =
+    '<span class="g">◉</span>SCAN FOR BUYERS<span class="g">◉</span>';
+  checkReady();
+}
+ 
+function checkReady() {
+  const loc = document.getElementById('loc').value.trim();
+  const itm = document.getElementById('itm').value.trim();
+  document.getElementById('scanBtn').disabled = !(loc && itm) || scanning;
+}
+</script>
+</body>
+</html>
+ 
