@@ -15,256 +15,299 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ─────────────────────────────────────────────────────────────
+// SELLER BLACKLIST
+// If ANY of these appear in the post — discard it immediately
+// ─────────────────────────────────────────────────────────────
+const SELLER_PHRASES = [
+  'for sale',
+  'i am selling',
+  "i'm selling",
+  'selling my',
+  'selling a ',
+  'selling an ',
+  'selling these',
+  'selling this',
+  'asking price',
+  'asking $',
+  'price is',
+  'priced at',
+  ' obo',
+  'or best offer',
+  'firm price',
+  'shipped for',
+  'free shipping',
+  'buy it now',
+  'pick up only',
+  'local pickup',
+  'dm for price',
+  'message for price',
+  'comment to buy',
+  'available for',
+  'just reduced',
+  'price drop',
+  'make an offer',
+  'taking offers',
+  'open to offers',
+  'willing to ship',
+  'will ship',
+  'can ship',
+  'paypal accepted',
+  'venmo accepted',
+  'cash only',
+  'cash preferred',
+  'contact me to buy',
+  'inbox me to buy',
+  'pm me to buy',
+  'text to buy',
+  'call to buy',
+  'motivated seller',
+  'must sell',
+  'need to sell',
+  'gotta sell',
+  'letting go',
+  'letting it go',
+  'parting with',
+  'getting rid of',
+  'moving sale',
+  'estate sale',
+  'garage sale',
+];
+
+// ─────────────────────────────────────────────────────────────
+// BUYER INTENT PHRASES — each has a point value
+// Higher value = stronger buyer signal
+// ─────────────────────────────────────────────────────────────
+const BUYER_PHRASES_SCORED = [
+  // Strong signals (3 points)
+  { phrase: ' iso ',             score: 3 },
+  { phrase: ' wtb ',             score: 3 },
+  { phrase: 'want to buy',       score: 3 },
+  { phrase: 'wanting to buy',    score: 3 },
+  { phrase: 'looking to buy',    score: 3 },
+  { phrase: 'in search of',      score: 3 },
+  { phrase: 'does anyone have',  score: 3 },
+  { phrase: 'does anyone got',   score: 3 },
+  { phrase: 'is anyone selling', score: 3 },
+  { phrase: 'need to buy',       score: 3 },
+  { phrase: 'i need to buy',     score: 3 },
+  // Medium signals (2 points)
+  { phrase: 'looking for',       score: 2 },
+  { phrase: 'searching for',     score: 2 },
+  { phrase: 'trying to find',    score: 2 },
+  { phrase: 'hoping to find',    score: 2 },
+  { phrase: 'hoping to buy',     score: 2 },
+  { phrase: 'on the hunt for',   score: 2 },
+  { phrase: 'anyone got',        score: 2 },
+  { phrase: 'anyone have',       score: 2 },
+  { phrase: 'anyone selling',    score: 2 },
+  { phrase: 'does anyone sell',  score: 2 },
+  { phrase: 'where can i find',  score: 2 },
+  { phrase: 'where can i get',   score: 2 },
+  { phrase: 'where do i find',   score: 2 },
+  { phrase: 'where do i get',    score: 2 },
+  // Weaker signals (1 point)
+  { phrase: 'i need a',          score: 1 },
+  { phrase: 'i need an',         score: 1 },
+  { phrase: 'trying to get',     score: 1 },
+  { phrase: 'who has',           score: 1 },
+  { phrase: 'who sells',         score: 1 },
+  { phrase: 'can anyone sell',   score: 1 },
+];
+
+// Commercial kitchen specific buyer phrases
+const COMMERCIAL_EXTRA = [
+  { phrase: 'opening a restaurant',        score: 3 },
+  { phrase: 'starting a restaurant',       score: 3 },
+  { phrase: 'opening a catering',          score: 3 },
+  { phrase: 'starting a catering',         score: 3 },
+  { phrase: 'need equipment for',          score: 3 },
+  { phrase: 'looking for commercial',      score: 3 },
+  { phrase: 'need commercial',             score: 3 },
+  { phrase: 'iso commercial',              score: 3 },
+  { phrase: 'wtb commercial',              score: 3 },
+  { phrase: 'outfitting my kitchen',       score: 2 },
+  { phrase: 'equipping my restaurant',     score: 2 },
+  { phrase: 'setting up my kitchen',       score: 2 },
+  { phrase: 'setting up a restaurant',     score: 2 },
+  { phrase: 'building out my kitchen',     score: 2 },
+  { phrase: 'restaurant equipment needed', score: 2 },
+  { phrase: 'kitchen equipment needed',    score: 2 },
+  { phrase: 'catering equipment needed',   score: 2 },
+  { phrase: 'used commercial kitchen',     score: 2 },
+  { phrase: 'used restaurant equipment',   score: 2 },
+  { phrase: 'need for my restaurant',      score: 1 },
+  { phrase: 'need for my kitchen',         score: 1 },
+  { phrase: 'need for catering',           score: 1 },
+];
+
+// Minimum score to include a result (tune this up/down as needed)
+const MIN_BUYER_SCORE = 2;
+
+// ─────────────────────────────────────────────────────────────
+// CORE FILTER FUNCTION
+// Returns score > 0 if buyer post, 0 if seller or irrelevant
+// ─────────────────────────────────────────────────────────────
+function getBuyerScore(text, item, mode) {
+  const t = ` ${text.toLowerCase()} `;
+
+  // Must mention the item
+  if (!t.includes(item.toLowerCase())) return 0;
+
+  // Immediately discard if ANY seller phrase is present
+  if (SELLER_PHRASES.some(p => t.includes(p))) return 0;
+
+  // Calculate buyer intent score
+  const phrases = mode === 'commercial'
+    ? [...BUYER_PHRASES_SCORED, ...COMMERCIAL_EXTRA]
+    : BUYER_PHRASES_SCORED;
+
+  let score = 0;
+  phrases.forEach(({ phrase, score: s }) => {
+    if (t.includes(phrase)) score += s;
+  });
+
+  return score;
+}
+
+function isBuyerPost(text, item, mode) {
+  return getBuyerScore(text, item, mode) >= MIN_BUYER_SCORE;
+}
+
+function getMatchedPhrase(text, mode) {
+  const t = ` ${text.toLowerCase()} `;
+  const phrases = mode === 'commercial'
+    ? [...BUYER_PHRASES_SCORED, ...COMMERCIAL_EXTRA]
+    : BUYER_PHRASES_SCORED;
+  const match = phrases
+    .filter(({ phrase }) => t.includes(phrase))
+    .sort((a, b) => b.score - a.score)[0];
+  return match ? match.phrase.trim() : 'buyer intent';
+}
+
+// ─────────────────────────────────────────────────────────────
 // NEARBY CITIES MAP
-// For each city we list nearby cities within ~10/30/50/70 miles
-// radius tiers: 10, 20, 30, 50, 100 (nationwide = no filter)
 // ─────────────────────────────────────────────────────────────
 const NEARBY_CITIES = {
-  // INLAND EMPIRE / SAN BERNARDINO AREA
   'san bernardino': {
-    10:  ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland'],
-    20:  ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda'],
-    30:  ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont'],
-    50:  ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont', 'Pomona', 'Corona', 'Victorville', 'Hesperia', 'Chino', 'Chino Hills'],
+    10: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland'],
+    20: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda'],
+    30: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont'],
+    50: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont', 'Pomona', 'Corona', 'Victorville', 'Hesperia', 'Chino', 'Chino Hills'],
   },
   'riverside': {
-    10:  ['Riverside', 'Moreno Valley', 'Corona', 'Norco'],
-    20:  ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley'],
-    30:  ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula'],
-    50:  ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula', 'Hemet', 'Murrieta', 'Lake Elsinore', 'Pomona', 'Chino'],
+    10: ['Riverside', 'Moreno Valley', 'Corona', 'Norco'],
+    20: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley'],
+    30: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula'],
+    50: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula', 'Hemet', 'Murrieta', 'Lake Elsinore', 'Pomona', 'Chino'],
   },
-  // LOS ANGELES AREA
   'los angeles': {
-    10:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena'],
-    20:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica'],
-    30:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey'],
-    50:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey', 'Anaheim', 'Orange', 'Irvine', 'Santa Ana', 'San Bernardino'],
+    10: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena'],
+    20: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica'],
+    30: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey'],
+    50: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey', 'Anaheim', 'Orange', 'Irvine', 'Santa Ana', 'San Bernardino'],
   },
   'la': {
-    10:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale'],
-    20:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica'],
-    30:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey'],
-    50:  ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey', 'Anaheim', 'Irvine', 'San Bernardino'],
+    10: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale'],
+    20: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica'],
+    30: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey'],
+    50: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey', 'Anaheim', 'Irvine', 'San Bernardino'],
   },
-  // SAN DIEGO
   'san diego': {
-    10:  ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee'],
-    20:  ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley'],
-    30:  ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos'],
-    50:  ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos', 'Carlsbad', 'Temecula', 'Murrieta'],
+    10: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee'],
+    20: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley'],
+    30: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos'],
+    50: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos', 'Carlsbad', 'Temecula', 'Murrieta'],
   },
-  // SAN FRANCISCO BAY AREA
   'san francisco': {
-    10:  ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco'],
-    20:  ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro'],
-    30:  ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City'],
-    50:  ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City', 'Palo Alto', 'Mountain View', 'Concord', 'Vallejo'],
+    10: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco'],
+    20: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro'],
+    30: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City'],
+    50: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City', 'Palo Alto', 'Mountain View', 'Concord', 'Vallejo'],
   },
-  // NEW YORK
   'new york': {
-    10:  ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken'],
-    20:  ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island'],
-    30:  ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle'],
-    50:  ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle', 'Bridgeport', 'Stamford', 'Hartford'],
+    10: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken'],
+    20: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island'],
+    30: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle'],
+    50: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle', 'Bridgeport', 'Stamford', 'Hartford'],
   },
-  // CHICAGO
   'chicago': {
-    10:  ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie'],
-    20:  ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan'],
-    30:  ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond'],
-    50:  ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond', 'Gary', 'Kenosha', 'Rockford'],
+    10: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie'],
+    20: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan'],
+    30: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond'],
+    50: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond', 'Gary', 'Kenosha', 'Rockford'],
   },
-  // HOUSTON
   'houston': {
-    10:  ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City'],
-    20:  ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'Galveston'],
-    30:  ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'Galveston', 'The Woodlands', 'Conroe', 'Friendswood'],
-    50:  ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'Galveston', 'The Woodlands', 'Conroe', 'Friendswood', 'Beaumont', 'Texas City'],
+    10: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City'],
+    20: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City'],
+    30: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'The Woodlands', 'Conroe', 'Friendswood'],
+    50: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'The Woodlands', 'Conroe', 'Friendswood', 'Galveston', 'Beaumont'],
   },
-  // DALLAS
   'dallas': {
-    10:  ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland'],
-    20:  ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton'],
-    30:  ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville'],
-    50:  ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville', 'Allen', 'Richardson', 'Waco'],
+    10: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland'],
+    20: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton'],
+    30: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville'],
+    50: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville', 'Allen', 'Richardson', 'Waco'],
   },
-  // PHOENIX
   'phoenix': {
-    10:  ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler'],
-    20:  ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise'],
-    30:  ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye'],
-    50:  ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye', 'Casa Grande', 'Queen Creek'],
+    10: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler'],
+    20: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise'],
+    30: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye'],
+    50: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye', 'Casa Grande', 'Queen Creek'],
   },
-  // SEATTLE
   'seattle': {
-    10:  ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton'],
-    20:  ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn'],
-    30:  ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood'],
-    50:  ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood', 'Olympia', 'Bellingham'],
+    10: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton'],
+    20: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn'],
+    30: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood'],
+    50: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood', 'Olympia', 'Bellingham'],
   },
-  // DENVER
   'denver': {
-    10:  ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada'],
-    20:  ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton'],
-    30:  ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City'],
-    50:  ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City', 'Fort Collins', 'Longmont', 'Greeley'],
+    10: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada'],
+    20: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton'],
+    30: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City'],
+    50: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City', 'Fort Collins', 'Longmont', 'Greeley'],
   },
-  // MIAMI
   'miami': {
-    10:  ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami'],
-    20:  ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar'],
-    30:  ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall'],
-    50:  ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall', 'Boca Raton', 'West Palm Beach', 'Pompano Beach'],
+    10: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami'],
+    20: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar'],
+    30: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall'],
+    50: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall', 'Boca Raton', 'West Palm Beach', 'Pompano Beach'],
   },
-  // ATLANTA
   'atlanta': {
-    10:  ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta'],
-    20:  ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point'],
-    30:  ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville'],
-    50:  ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville', 'Gainesville', 'Newnan', 'Rome'],
+    10: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta'],
+    20: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point'],
+    30: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville'],
+    50: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville', 'Gainesville', 'Newnan', 'Rome'],
   },
-  // BOSTON
   'boston': {
-    10:  ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline'],
-    20:  ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton'],
-    30:  ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence'],
-    50:  ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence', 'Providence', 'Manchester'],
+    10: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline'],
+    20: ['Boston', 'Cambridge', 'Somerville','Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton'],
+    30: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence'],
+    50: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence', 'Providence', 'Manchester'],
   },
-  // LAS VEGAS
   'las vegas': {
-    10:  ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise'],
-    20:  ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley'],
-    30:  ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump'],
-    50:  ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump', 'St. George'],
+    10: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise'],
+    20: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley'],
+    30: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump'],
+    50: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump', 'St. George'],
   },
 };
 
-// ─────────────────────────────────────────────────────────────
-// GET NEARBY CITIES FOR A LOCATION + RADIUS
-// ─────────────────────────────────────────────────────────────
 function getNearbyKeywords(location, radius) {
-  if (radius === '100') return null; // nationwide — no filter
-
+  if (radius === '100') return null;
   const locLower = location.toLowerCase().replace(/,.*$/, '').trim();
   const radiusNum = parseInt(radius);
-
-  // Find the best radius tier
-  const tier = radiusNum <= 10 ? 10
-             : radiusNum <= 20 ? 20
-             : radiusNum <= 30 ? 30
-             : 50;
-
+  const tier = radiusNum <= 10 ? 10 : radiusNum <= 20 ? 20 : radiusNum <= 30 ? 30 : 50;
   const cityData = NEARBY_CITIES[locLower];
-
-  if (cityData && cityData[tier]) {
-    return cityData[tier];
-  }
-
-  // Fallback — just use the entered location as-is
-  const cityName = location.replace(/,.*$/, '').trim();
-  return [cityName];
+  if (cityData && cityData[tier]) return cityData[tier];
+  return [location.replace(/,.*$/, '').trim()];
 }
 
-// Build the location OR string for queries
-// e.g. ("San Bernardino" OR "Colton" OR "Rialto" OR "Fontana")
 function buildLocationFilter(location, radius) {
   if (radius === '100') return '';
   const cities = getNearbyKeywords(location, radius);
   if (!cities || cities.length === 0) return '';
   if (cities.length === 1) return ` "${cities[0]}"`;
   return ` (${cities.map(c => `"${c}"`).join(' OR ')})`;
-}
-
-// ─────────────────────────────────────────────────────────────
-// BUYER INTENT PHRASES
-// ─────────────────────────────────────────────────────────────
-const GENERAL_PHRASES = [
-  'does anyone have',
-  'does anyone got',
-  'in search of',
-  ' iso ',
-  'is anyone selling',
-  'where can i find',
-  'where can i get',
-  'looking for',
-  'looking to buy',
-  'want to buy',
-  'wanting to buy',
-  ' wtb ',
-  'anyone got',
-  'anyone have',
-  'does anyone sell',
-  'trying to find',
-  'need to buy',
-  'i need a',
-  'i need to buy',
-  'anyone selling',
-  'can anyone sell',
-  'who has',
-  'who sells',
-  'where do i find',
-  'where do i get',
-  'trying to get',
-  'hoping to find',
-  'hoping to buy',
-  'searching for',
-  'on the hunt for',
-];
-
-const COMMERCIAL_PHRASES = [
-  ...GENERAL_PHRASES,
-  'opening a restaurant',
-  'starting a restaurant',
-  'opening a catering',
-  'starting a catering',
-  'need equipment for',
-  'looking for commercial',
-  'need commercial',
-  'restaurant equipment needed',
-  'kitchen equipment needed',
-  'need a commercial kitchen',
-  'looking for used commercial',
-  'iso commercial',
-  'wtb commercial',
-  'need for my restaurant',
-  'need for my kitchen',
-  'outfitting my kitchen',
-  'equipping my restaurant',
-  'furnishing my restaurant',
-  'building out my kitchen',
-  'setting up my kitchen',
-  'setting up a restaurant',
-  'need for catering',
-  'catering equipment needed',
-  'used restaurant equipment',
-  'used commercial kitchen',
-  'surplus kitchen equipment',
-];
-
-const COMMERCIAL_SUBREDDITS = [
-  'KitchenConfidential',
-  'restaurants',
-  'restaurantowners',
-  'Cooking',
-  'Entrepreneur',
-  'smallbusiness',
-  'catering',
-  'foodservice',
-  'chef',
-];
-
-function isBuyerPost(text, item, mode) {
-  const t = ` ${text.toLowerCase()} `;
-  const phrases = mode === 'commercial' ? COMMERCIAL_PHRASES : GENERAL_PHRASES;
-  const hasItem = t.includes(item.toLowerCase());
-  const hasIntent = phrases.some(phrase => t.includes(phrase));
-  return hasItem && hasIntent;
-}
-
-function getMatchedPhrase(text, mode) {
-  const t = ` ${text.toLowerCase()} `;
-  const phrases = mode === 'commercial' ? COMMERCIAL_PHRASES : GENERAL_PHRASES;
-  return (phrases.find(p => t.includes(p)) || 'buyer intent').trim();
 }
 
 const HEADERS = {
@@ -284,20 +327,15 @@ async function searchReddit(item, location, radius, mode) {
   const results = [];
   const locFilter = buildLocationFilter(location, radius);
 
-  let queries;
-  if (mode === 'commercial') {
-    queries = [
-      `"ISO" OR "WTB" OR "looking for" OR "need" "${item}" commercial${locFilter}`,
-      `"opening a restaurant" OR "starting a restaurant" OR "catering" "${item}"${locFilter}`,
-      `"used commercial" OR "restaurant equipment" "${item}"${locFilter}`,
-    ];
-  } else {
-    queries = [
-      `"ISO" OR "WTB" OR "looking for" "${item}"${locFilter}`,
-      `"want to buy" OR "in search of" "${item}"${locFilter}`,
-      `"does anyone have" OR "anyone selling" "${item}"${locFilter}`,
-    ];
-  }
+  const queries = mode === 'commercial' ? [
+    `"ISO" OR "WTB" OR "looking for" "${item}" commercial${locFilter}`,
+    `"opening a restaurant" OR "starting a restaurant" "${item}"${locFilter}`,
+    `"used commercial" OR "restaurant equipment" "${item}"${locFilter}`,
+  ] : [
+    `"ISO" OR "WTB" OR "looking for" "${item}"${locFilter}`,
+    `"want to buy" OR "in search of" "${item}"${locFilter}`,
+    `"does anyone have" OR "anyone selling" "${item}"${locFilter}`,
+  ];
 
   for (const q of queries) {
     try {
@@ -305,23 +343,20 @@ async function searchReddit(item, location, radius, mode) {
       const url = `https://www.reddit.com/search.json?q=${encoded}&sort=new&limit=15&type=link`;
 
       const res = await axios.get(url, {
-        headers: {
-          'User-Agent': 'BuyerRadar/1.0 (buyer intent search tool)',
-          'Accept': 'application/json',
-        },
+        headers: { 'User-Agent': 'BuyerRadar/1.0', 'Accept': 'application/json' },
         timeout: 10000,
       });
 
-      const posts = res.data?.data?.children || [];
-
-      posts.forEach(post => {
+      (res.data?.data?.children || []).forEach(post => {
         const d = post.data;
         const fullText = `${d.title} ${d.selftext || ''}`;
         if (!d.permalink) return;
 
         const postUrl = `https://reddit.com${d.permalink}`;
         if (results.find(r => r.url === postUrl)) return;
-        if (!isBuyerPost(fullText, item, mode)) return;
+
+        const score = getBuyerScore(fullText, item, mode);
+        if (score < MIN_BUYER_SCORE) return;
 
         results.push({
           url: postUrl,
@@ -330,6 +365,7 @@ async function searchReddit(item, location, radius, mode) {
           platform: 'Reddit',
           color: '#ff6314',
           phraseLabel: getMatchedPhrase(fullText, mode),
+          buyerScore: score,
         });
       });
 
@@ -344,7 +380,6 @@ async function searchReddit(item, location, radius, mode) {
 
 // ─────────────────────────────────────────────────────────────
 // CRAIGSLIST — RSS feeds
-// Already city-specific by subdomain — naturally bounded
 // ─────────────────────────────────────────────────────────────
 async function searchCraigslist(item, location, radius, mode) {
   const results = [];
@@ -354,18 +389,12 @@ async function searchCraigslist(item, location, radius, mode) {
     'san diego': 'sandiego',
     'san francisco': 'sfbay', 'sf': 'sfbay',
     'new york': 'newyork', 'nyc': 'newyork',
-    'chicago': 'chicago',
-    'houston': 'houston',
-    'phoenix': 'phoenix',
-    'philadelphia': 'philadelphia',
-    'san antonio': 'sanantonio',
-    'dallas': 'dallas',
-    'seattle': 'seattle',
-    'denver': 'denver',
-    'boston': 'boston',
-    'atlanta': 'atlanta',
-    'miami': 'miami',
-    'portland': 'portland',
+    'chicago': 'chicago', 'houston': 'houston',
+    'phoenix': 'phoenix', 'philadelphia': 'philadelphia',
+    'san antonio': 'sanantonio', 'dallas': 'dallas',
+    'seattle': 'seattle', 'denver': 'denver',
+    'boston': 'boston', 'atlanta': 'atlanta',
+    'miami': 'miami', 'portland': 'portland',
     'las vegas': 'lasvegas',
     'riverside': 'inlandempire',
     'san bernardino': 'inlandempire',
@@ -382,7 +411,6 @@ async function searchCraigslist(item, location, radius, mode) {
   for (const section of sections) {
     try {
       const url = `https://${subdomain}.craigslist.org/search/${section}?query=${query}&format=rss`;
-
       const res = await axios.get(url, {
         headers: { ...HEADERS, 'Accept': 'application/rss+xml, application/xml, text/xml' },
         timeout: 10000,
@@ -392,21 +420,27 @@ async function searchCraigslist(item, location, radius, mode) {
 
       $('item').each((i, el) => {
         if (results.length >= 20) return;
-
         const title = $(el).find('title').first().text().trim();
         const link = $(el).find('link').first().text().trim();
         const description = $(el).find('description').first().text().trim();
-
         if (!title || !link) return;
+
         const combined = `${title} ${description}`;
         if (!combined.toLowerCase().includes(item.toLowerCase())) return;
-        if (section === 'biz' && !isBuyerPost(combined, item, mode)) return;
         if (results.find(r => r.url === link)) return;
+
+        // For "wanted" section, it's always a buyer — but still check seller blacklist
+        if (section === 'wan') {
+          const t = ` ${combined.toLowerCase()} `;
+          if (SELLER_PHRASES.some(p => t.includes(p))) return;
+        } else {
+          if (getBuyerScore(combined, item, mode) < MIN_BUYER_SCORE) return;
+        }
 
         results.push({
           url: link,
           title,
-          snippet: description ? description.slice(0, 200) : 'Craigslist post — this person is looking to buy',
+          snippet: description ? description.slice(0, 200) : 'Craigslist WANTED — looking to buy',
           platform: 'Craigslist',
           color: '#a855f7',
           phraseLabel: section === 'wan' ? 'craigslist wanted' : getMatchedPhrase(combined, mode),
@@ -414,7 +448,7 @@ async function searchCraigslist(item, location, radius, mode) {
       });
 
     } catch (err) {
-      console.error(`Craigslist RSS error (${section}):`, err.message);
+      console.error(`Craigslist error (${section}):`, err.message);
     }
   }
 
@@ -440,7 +474,6 @@ async function searchX(item, location, radius, mode) {
     `"ISO" "${item}" commercial${locFilter}`,
     `"WTB" "${item}" commercial${locFilter}`,
     `"looking for" "${item}" restaurant${locFilter}`,
-    `"need" "${item}" catering${locFilter}`,
   ] : [
     `"ISO" "${item}"${locFilter}`,
     `"WTB" "${item}"${locFilter}`,
@@ -453,15 +486,12 @@ async function searchX(item, location, radius, mode) {
 
     for (const q of intentQueries) {
       try {
-        const query = encodeURIComponent(q);
-        const url = `${instance}/search?f=tweets&q=${query}`;
-
-        const res = await axios.get(url, { headers: HEADERS, timeout: 8000 });
+        const res = await axios.get(`${instance}/search?f=tweets&q=${encodeURIComponent(q)}`, {
+          headers: HEADERS, timeout: 8000,
+        });
         const $ = cheerio.load(res.data);
-
         const items = $('.timeline-item, .tweet-body');
         if (items.length === 0) continue;
-
         instanceWorking = true;
 
         items.each((i, el) => {
@@ -469,7 +499,9 @@ async function searchX(item, location, radius, mode) {
           const text = $(el).find('.tweet-content, .content').text().trim();
           const link = $(el).find('a.tweet-link, .tweet-date a').attr('href');
           if (!text || !link) return;
-          if (!isBuyerPost(text, item, mode)) return;
+
+          const score = getBuyerScore(text, item, mode);
+          if (score < MIN_BUYER_SCORE) return;
 
           const fullUrl = `https://x.com${link.replace(/^\/[^/]+/, '')}`;
           if (results.find(r => r.url === fullUrl)) return;
@@ -486,7 +518,7 @@ async function searchX(item, location, radius, mode) {
 
         await sleep(400);
       } catch (err) {
-        console.error(`Nitter error (${instance}):`, err.message);
+        console.error(`Nitter error:`, err.message);
       }
     }
 
@@ -497,18 +529,15 @@ async function searchX(item, location, radius, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GOOGLE — via SerpApi with location targeting
+// GOOGLE — via SerpApi
 // ─────────────────────────────────────────────────────────────
 async function searchGoogle(item, location, radius, mode) {
   const results = [];
-
-  if (!process.env.SERPAPI_KEY) {
-    console.error('SERPAPI_KEY not set — skipping Google');
-    return results;
-  }
+  if (!process.env.SERPAPI_KEY) return results;
 
   const locFilter = buildLocationFilter(location, radius);
   const exclude = '-site:reddit.com -site:craigslist.org -site:x.com -site:twitter.com -site:offerup.com -site:nextdoor.com';
+  const primaryCity = location.replace(/,.*$/, '').trim();
 
   const intentQueries = mode === 'commercial' ? [
     `"ISO" "${item}" commercial${locFilter} ${exclude}`,
@@ -524,9 +553,6 @@ async function searchGoogle(item, location, radius, mode) {
     `"want to buy" "${item}"${locFilter} ${exclude}`,
   ];
 
-  // Get the primary city for SerpApi location parameter
-  const primaryCity = location.replace(/,.*$/, '').trim();
-
   for (const q of intentQueries) {
     try {
       const params = new URLSearchParams({
@@ -541,16 +567,13 @@ async function searchGoogle(item, location, radius, mode) {
       });
 
       const res = await axios.get(`https://serpapi.com/search.json?${params.toString()}`, { timeout: 10000 });
-
-      if (res.data.error) {
-        console.error('SerpApi error:', res.data.error);
-        continue;
-      }
+      if (res.data.error) continue;
 
       (res.data.organic_results || []).forEach(r => {
         if (!r.link || results.find(x => x.url === r.link)) return;
         const combined = `${r.title || ''} ${r.snippet || ''}`;
-        if (!isBuyerPost(combined, item, mode)) return;
+        const score = getBuyerScore(combined, item, mode);
+        if (score < MIN_BUYER_SCORE) return;
 
         results.push({
           url: r.link,
@@ -559,6 +582,7 @@ async function searchGoogle(item, location, radius, mode) {
           platform: 'Google',
           color: '#00d4ff',
           phraseLabel: getMatchedPhrase(combined, mode),
+          buyerScore: score,
         });
       });
 
@@ -568,7 +592,8 @@ async function searchGoogle(item, location, radius, mode) {
     }
   }
 
-  return results;
+  // Sort by buyer score — strongest signals first
+  return results.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -584,12 +609,10 @@ async function searchNextdoor(item, location, radius, mode) {
     : `("ISO" OR "WTB" OR "looking for" OR "want to buy" OR "in search of" OR "does anyone have")`;
 
   try {
-    const q = `site:nextdoor.com ${intentPart} "${item}"${locFilter}`;
-
     const params = new URLSearchParams({
       api_key: process.env.SERPAPI_KEY,
       engine: 'google',
-      q,
+      q: `site:nextdoor.com ${intentPart} "${item}"${locFilter}`,
       num: '10',
       tbs: 'qdr:m',
       gl: 'us',
@@ -602,7 +625,7 @@ async function searchNextdoor(item, location, radius, mode) {
       if (!r.link || !r.link.includes('nextdoor.com')) return;
       if (results.find(x => x.url === r.link)) return;
       const combined = `${r.title || ''} ${r.snippet || ''}`;
-      if (!isBuyerPost(combined, item, mode)) return;
+      if (getBuyerScore(combined, item, mode) < MIN_BUYER_SCORE) return;
 
       results.push({
         url: r.link,
@@ -615,7 +638,7 @@ async function searchNextdoor(item, location, radius, mode) {
     });
 
   } catch (err) {
-    console.error('Nextdoor/SerpApi error:', err.message);
+    console.error('Nextdoor error:', err.message);
   }
 
   return results;
@@ -626,16 +649,10 @@ async function searchNextdoor(item, location, radius, mode) {
 // ─────────────────────────────────────────────────────────────
 app.post('/api/search', async (req, res) => {
   const { item, location, radius, mode } = req.body;
-
-  if (!item || !location) {
-    return res.status(400).json({ error: 'item and location are required' });
-  }
+  if (!item || !location) return res.status(400).json({ error: 'item and location are required' });
 
   const searchMode = mode === 'commercial' ? 'commercial' : 'general';
-  const nearbyCities = getNearbyKeywords(location, radius);
-
   console.log(`\n◉ [${searchMode.toUpperCase()}] "${item}" near ${location} (${radius} mi)`);
-  if (nearbyCities) console.log(`◉ Location filter: ${nearbyCities.join(', ')}`);
 
   try {
     const [reddit, craigslist, x, nextdoor, google] = await Promise.allSettled([
@@ -663,6 +680,9 @@ app.post('/api/search', async (req, res) => {
       return true;
     });
 
+    // Sort all results by buyer score — strongest leads first
+    unique.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
+
     console.log(`◉ Found ${unique.length} verified buyer posts`);
 
     return res.json({
@@ -674,7 +694,6 @@ app.post('/api/search', async (req, res) => {
         Nextdoor: extract(nextdoor).length,
         Google: extract(google).length,
       },
-      locationFilter: nearbyCities,
     });
 
   } catch (err) {
@@ -683,15 +702,8 @@ app.post('/api/search', async (req, res) => {
   }
 });
 
-// ─────────────────────────────────────────────────────────────
-// HEALTH CHECK
-// ─────────────────────────────────────────────────────────────
 app.get('/api/health', (req, res) => {
-  res.json({
-    status: 'ok',
-    message: 'BuyerRadar backend running — strict location filtering active',
-    platforms: ['Reddit', 'Craigslist', 'X (Twitter)', 'Nextdoor', 'Google'],
-  });
+  res.json({ status: 'ok', message: 'BuyerRadar — seller blacklist + confidence scoring active' });
 });
 
 app.listen(PORT, () => {
