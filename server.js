@@ -15,8 +15,65 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ─────────────────────────────────────────────────────────────
-// SELLER BLACKLIST
-// If ANY of these appear in the post — discard it immediately
+// DOMAIN BLACKLIST
+// These sites are auction houses, marketplaces, or seller sites
+// Any result from these domains is automatically discarded
+// ─────────────────────────────────────────────────────────────
+const BLOCKED_DOMAINS = [
+  // Auction sites
+  'ebay.com',
+  'proxibid.com',
+  'bidspotter.com',
+  'govplanet.com',
+  'ironplanet.com',
+  'ritchiebros.com',
+  'rbauction.com',
+  'purplewave.com',
+  'bidadoo.com',
+  'auctionzip.com',
+  'liveauctioneers.com',
+  'invaluable.com',
+  'hibid.com',
+  'auctiontime.com',
+  'equipmentfacts.com',
+  'macktrucks.com',
+  'catauction.com',
+  'sandhills.com',
+  'auctionnation.com',
+  'bringatrailer.com',
+  // Marketplace / seller sites
+  'amazon.com',
+  'walmart.com',
+  'etsy.com',
+  'mercari.com',
+  'poshmark.com',
+  'depop.com',
+  'shopify.com',
+  'alibaba.com',
+  'aliexpress.com',
+  'webstaurantstore.com',
+  'restaurantequipment.com',
+  'katom.com',
+  'centralrestaurant.com',
+  'acitydiscount.com',
+  'burkett.com',
+  'usedrestaurantequipment.com',
+  'excalibur.com',
+  'yelp.com',
+  'yellowpages.com',
+  'angieslist.com',
+  'thumbtack.com',
+  'homedepot.com',
+  'lowes.com',
+  'bestbuy.com',
+  'target.com',
+  'costco.com',
+  'samsclub.com',
+];
+
+// ─────────────────────────────────────────────────────────────
+// SELLER PHRASE BLACKLIST
+// If ANY of these appear in the post — discard immediately
 // ─────────────────────────────────────────────────────────────
 const SELLER_PHRASES = [
   'for sale',
@@ -55,11 +112,6 @@ const SELLER_PHRASES = [
   'venmo accepted',
   'cash only',
   'cash preferred',
-  'contact me to buy',
-  'inbox me to buy',
-  'pm me to buy',
-  'text to buy',
-  'call to buy',
   'motivated seller',
   'must sell',
   'need to sell',
@@ -71,11 +123,25 @@ const SELLER_PHRASES = [
   'moving sale',
   'estate sale',
   'garage sale',
+  'yard sale',
+  'auction',
+  'bidding',
+  'starting bid',
+  'reserve price',
+  'lot of',
+  'wholesale',
+  'bulk pricing',
+  'dealer pricing',
+  'manufacturer',
+  'brand new in box',
+  'new in box',
+  'never used',
+  'never opened',
+  'sealed in box',
 ];
 
 // ─────────────────────────────────────────────────────────────
-// BUYER INTENT PHRASES — each has a point value
-// Higher value = stronger buyer signal
+// BUYER INTENT PHRASES — scored
 // ─────────────────────────────────────────────────────────────
 const BUYER_PHRASES_SCORED = [
   // Strong signals (3 points)
@@ -90,6 +156,7 @@ const BUYER_PHRASES_SCORED = [
   { phrase: 'is anyone selling', score: 3 },
   { phrase: 'need to buy',       score: 3 },
   { phrase: 'i need to buy',     score: 3 },
+  { phrase: 'trying to buy',     score: 3 },
   // Medium signals (2 points)
   { phrase: 'looking for',       score: 2 },
   { phrase: 'searching for',     score: 2 },
@@ -105,7 +172,7 @@ const BUYER_PHRASES_SCORED = [
   { phrase: 'where can i get',   score: 2 },
   { phrase: 'where do i find',   score: 2 },
   { phrase: 'where do i get',    score: 2 },
-  // Weaker signals (1 point)
+  // Weaker signals (1 point — not enough alone)
   { phrase: 'i need a',          score: 1 },
   { phrase: 'i need an',         score: 1 },
   { phrase: 'trying to get',     score: 1 },
@@ -114,7 +181,6 @@ const BUYER_PHRASES_SCORED = [
   { phrase: 'can anyone sell',   score: 1 },
 ];
 
-// Commercial kitchen specific buyer phrases
 const COMMERCIAL_EXTRA = [
   { phrase: 'opening a restaurant',        score: 3 },
   { phrase: 'starting a restaurant',       score: 3 },
@@ -140,23 +206,31 @@ const COMMERCIAL_EXTRA = [
   { phrase: 'need for catering',           score: 1 },
 ];
 
-// Minimum score to include a result (tune this up/down as needed)
-const MIN_BUYER_SCORE = 2;
+// Raised from 2 to 3 — only strong buyer signals pass
+const MIN_BUYER_SCORE = 3;
 
 // ─────────────────────────────────────────────────────────────
-// CORE FILTER FUNCTION
-// Returns score > 0 if buyer post, 0 if seller or irrelevant
+// CORE FILTER
 // ─────────────────────────────────────────────────────────────
+function isBlockedDomain(url) {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '');
+    return BLOCKED_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+  } catch {
+    return false;
+  }
+}
+
 function getBuyerScore(text, item, mode) {
   const t = ` ${text.toLowerCase()} `;
 
   // Must mention the item
   if (!t.includes(item.toLowerCase())) return 0;
 
-  // Immediately discard if ANY seller phrase is present
+  // Instantly discard if ANY seller phrase present
   if (SELLER_PHRASES.some(p => t.includes(p))) return 0;
 
-  // Calculate buyer intent score
+  // Score buyer intent
   const phrases = mode === 'commercial'
     ? [...BUYER_PHRASES_SCORED, ...COMMERCIAL_EXTRA]
     : BUYER_PHRASES_SCORED;
@@ -185,7 +259,7 @@ function getMatchedPhrase(text, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// NEARBY CITIES MAP
+// NEARBY CITIES
 // ─────────────────────────────────────────────────────────────
 const NEARBY_CITIES = {
   'san bernardino': {
@@ -280,7 +354,7 @@ const NEARBY_CITIES = {
   },
   'boston': {
     10: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline'],
-    20: ['Boston', 'Cambridge', 'Somerville','Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton'],
+    20: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton'],
     30: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence'],
     50: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence', 'Providence', 'Manchester'],
   },
@@ -351,10 +425,8 @@ async function searchReddit(item, location, radius, mode) {
         const d = post.data;
         const fullText = `${d.title} ${d.selftext || ''}`;
         if (!d.permalink) return;
-
         const postUrl = `https://reddit.com${d.permalink}`;
         if (results.find(r => r.url === postUrl)) return;
-
         const score = getBuyerScore(fullText, item, mode);
         if (score < MIN_BUYER_SCORE) return;
 
@@ -379,27 +451,21 @@ async function searchReddit(item, location, radius, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// CRAIGSLIST — RSS feeds
+// CRAIGSLIST — RSS
 // ─────────────────────────────────────────────────────────────
 async function searchCraigslist(item, location, radius, mode) {
   const results = [];
 
   const cityMap = {
     'los angeles': 'losangeles', 'la': 'losangeles',
-    'san diego': 'sandiego',
-    'san francisco': 'sfbay', 'sf': 'sfbay',
-    'new york': 'newyork', 'nyc': 'newyork',
-    'chicago': 'chicago', 'houston': 'houston',
-    'phoenix': 'phoenix', 'philadelphia': 'philadelphia',
-    'san antonio': 'sanantonio', 'dallas': 'dallas',
-    'seattle': 'seattle', 'denver': 'denver',
-    'boston': 'boston', 'atlanta': 'atlanta',
-    'miami': 'miami', 'portland': 'portland',
-    'las vegas': 'lasvegas',
-    'riverside': 'inlandempire',
-    'san bernardino': 'inlandempire',
-    'ontario': 'inlandempire',
-    'rancho cucamonga': 'inlandempire',
+    'san diego': 'sandiego', 'san francisco': 'sfbay', 'sf': 'sfbay',
+    'new york': 'newyork', 'nyc': 'newyork', 'chicago': 'chicago',
+    'houston': 'houston', 'phoenix': 'phoenix', 'philadelphia': 'philadelphia',
+    'san antonio': 'sanantonio', 'dallas': 'dallas', 'seattle': 'seattle',
+    'denver': 'denver', 'boston': 'boston', 'atlanta': 'atlanta',
+    'miami': 'miami', 'portland': 'portland', 'las vegas': 'lasvegas',
+    'riverside': 'inlandempire', 'san bernardino': 'inlandempire',
+    'ontario': 'inlandempire', 'rancho cucamonga': 'inlandempire',
     'colton': 'inlandempire',
   };
 
@@ -424,12 +490,13 @@ async function searchCraigslist(item, location, radius, mode) {
         const link = $(el).find('link').first().text().trim();
         const description = $(el).find('description').first().text().trim();
         if (!title || !link) return;
+        if (isBlockedDomain(link)) return;
 
         const combined = `${title} ${description}`;
         if (!combined.toLowerCase().includes(item.toLowerCase())) return;
         if (results.find(r => r.url === link)) return;
 
-        // For "wanted" section, it's always a buyer — but still check seller blacklist
+        // Wanted section = buyer by definition, just check seller blacklist
         if (section === 'wan') {
           const t = ` ${combined.toLowerCase()} `;
           if (SELLER_PHRASES.some(p => t.includes(p))) return;
@@ -444,6 +511,7 @@ async function searchCraigslist(item, location, radius, mode) {
           platform: 'Craigslist',
           color: '#a855f7',
           phraseLabel: section === 'wan' ? 'craigslist wanted' : getMatchedPhrase(combined, mode),
+          buyerScore: section === 'wan' ? 3 : getBuyerScore(combined, item, mode),
         });
       });
 
@@ -456,7 +524,7 @@ async function searchCraigslist(item, location, radius, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// X (TWITTER) — via Nitter
+// X (TWITTER) — Nitter
 // ─────────────────────────────────────────────────────────────
 async function searchX(item, location, radius, mode) {
   const results = [];
@@ -499,10 +567,8 @@ async function searchX(item, location, radius, mode) {
           const text = $(el).find('.tweet-content, .content').text().trim();
           const link = $(el).find('a.tweet-link, .tweet-date a').attr('href');
           if (!text || !link) return;
-
           const score = getBuyerScore(text, item, mode);
           if (score < MIN_BUYER_SCORE) return;
-
           const fullUrl = `https://x.com${link.replace(/^\/[^/]+/, '')}`;
           if (results.find(r => r.url === fullUrl)) return;
 
@@ -513,6 +579,7 @@ async function searchX(item, location, radius, mode) {
             platform: 'X (Twitter)',
             color: '#e7e7e7',
             phraseLabel: getMatchedPhrase(text, mode),
+            buyerScore: score,
           });
         });
 
@@ -529,28 +596,37 @@ async function searchX(item, location, radius, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// GOOGLE — via SerpApi
+// GOOGLE — SerpApi with domain blacklist
 // ─────────────────────────────────────────────────────────────
 async function searchGoogle(item, location, radius, mode) {
   const results = [];
   if (!process.env.SERPAPI_KEY) return results;
 
   const locFilter = buildLocationFilter(location, radius);
-  const exclude = '-site:reddit.com -site:craigslist.org -site:x.com -site:twitter.com -site:offerup.com -site:nextdoor.com';
   const primaryCity = location.replace(/,.*$/, '').trim();
 
+  // Build exclude string from blocked domains
+  const domainExcludes = [
+    'reddit.com', 'craigslist.org', 'x.com', 'twitter.com',
+    'offerup.com', 'nextdoor.com', 'ebay.com', 'amazon.com',
+    'etsy.com', 'walmart.com', 'bidspotter.com', 'proxibid.com',
+    'govplanet.com', 'ironplanet.com', 'ritchiebros.com',
+    'liveauctioneers.com', 'hibid.com', 'auctionzip.com',
+    'webstaurantstore.com', 'katom.com', 'restaurantequipment.com',
+  ].map(d => `-site:${d}`).join(' ');
+
   const intentQueries = mode === 'commercial' ? [
-    `"ISO" "${item}" commercial${locFilter} ${exclude}`,
-    `"WTB" "${item}" commercial${locFilter} ${exclude}`,
-    `"looking for" "${item}" restaurant${locFilter} ${exclude}`,
-    `"opening a restaurant" "${item}"${locFilter} ${exclude}`,
-    `"used commercial kitchen equipment" "${item}"${locFilter} ${exclude}`,
+    `"ISO" "${item}" commercial${locFilter} ${domainExcludes}`,
+    `"WTB" "${item}" commercial${locFilter} ${domainExcludes}`,
+    `"looking for" "${item}" restaurant${locFilter} ${domainExcludes}`,
+    `"opening a restaurant" "${item}"${locFilter} ${domainExcludes}`,
+    `"used commercial kitchen equipment" "${item}"${locFilter} ${domainExcludes}`,
   ] : [
-    `"ISO" "${item}"${locFilter} ${exclude}`,
-    `"WTB" "${item}"${locFilter} ${exclude}`,
-    `"in search of" "${item}"${locFilter} ${exclude}`,
-    `"looking to buy" "${item}"${locFilter} ${exclude}`,
-    `"want to buy" "${item}"${locFilter} ${exclude}`,
+    `"ISO" "${item}"${locFilter} ${domainExcludes}`,
+    `"WTB" "${item}"${locFilter} ${domainExcludes}`,
+    `"in search of" "${item}"${locFilter} ${domainExcludes}`,
+    `"looking to buy" "${item}"${locFilter} ${domainExcludes}`,
+    `"want to buy" "${item}"${locFilter} ${domainExcludes}`,
   ];
 
   for (const q of intentQueries) {
@@ -570,7 +646,10 @@ async function searchGoogle(item, location, radius, mode) {
       if (res.data.error) continue;
 
       (res.data.organic_results || []).forEach(r => {
-        if (!r.link || results.find(x => x.url === r.link)) return;
+        if (!r.link) return;
+        if (isBlockedDomain(r.link)) return;
+        if (results.find(x => x.url === r.link)) return;
+
         const combined = `${r.title || ''} ${r.snippet || ''}`;
         const score = getBuyerScore(combined, item, mode);
         if (score < MIN_BUYER_SCORE) return;
@@ -592,12 +671,11 @@ async function searchGoogle(item, location, radius, mode) {
     }
   }
 
-  // Sort by buyer score — strongest signals first
   return results.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
 }
 
 // ─────────────────────────────────────────────────────────────
-// NEXTDOOR — via SerpApi
+// NEXTDOOR — SerpApi
 // ─────────────────────────────────────────────────────────────
 async function searchNextdoor(item, location, radius, mode) {
   const results = [];
@@ -625,7 +703,8 @@ async function searchNextdoor(item, location, radius, mode) {
       if (!r.link || !r.link.includes('nextdoor.com')) return;
       if (results.find(x => x.url === r.link)) return;
       const combined = `${r.title || ''} ${r.snippet || ''}`;
-      if (getBuyerScore(combined, item, mode) < MIN_BUYER_SCORE) return;
+      const score = getBuyerScore(combined, item, mode);
+      if (score < MIN_BUYER_SCORE) return;
 
       results.push({
         url: r.link,
@@ -634,6 +713,7 @@ async function searchNextdoor(item, location, radius, mode) {
         platform: 'Nextdoor',
         color: '#f472b6',
         phraseLabel: getMatchedPhrase(combined, mode),
+        buyerScore: score,
       });
     });
 
@@ -645,7 +725,7 @@ async function searchNextdoor(item, location, radius, mode) {
 }
 
 // ─────────────────────────────────────────────────────────────
-// MAIN SEARCH ENDPOINT
+// MAIN ENDPOINT
 // ─────────────────────────────────────────────────────────────
 app.post('/api/search', async (req, res) => {
   const { item, location, radius, mode } = req.body;
@@ -680,7 +760,7 @@ app.post('/api/search', async (req, res) => {
       return true;
     });
 
-    // Sort all results by buyer score — strongest leads first
+    // Sort strongest buyer signals first
     unique.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
 
     console.log(`◉ Found ${unique.length} verified buyer posts`);
@@ -703,7 +783,7 @@ app.post('/api/search', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'BuyerRadar — seller blacklist + confidence scoring active' });
+  res.json({ status: 'ok', message: 'BuyerRadar — domain blacklist + strict scoring active' });
 });
 
 app.listen(PORT, () => {
