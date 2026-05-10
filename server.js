@@ -15,136 +15,186 @@ app.use(express.json());
 app.use(express.static('public'));
 
 // ─────────────────────────────────────────────────────────────
-// DOMAIN BLACKLIST
-// These sites are auction houses, marketplaces, or seller sites
-// Any result from these domains is automatically discarded
+// TIGHT CITY CLUSTERS
 // ─────────────────────────────────────────────────────────────
-const BLOCKED_DOMAINS = [
-  // Auction sites
-  'ebay.com',
-  'proxibid.com',
-  'bidspotter.com',
-  'govplanet.com',
-  'ironplanet.com',
-  'ritchiebros.com',
-  'rbauction.com',
-  'purplewave.com',
-  'bidadoo.com',
-  'auctionzip.com',
-  'liveauctioneers.com',
-  'invaluable.com',
-  'hibid.com',
-  'auctiontime.com',
-  'equipmentfacts.com',
-  'macktrucks.com',
-  'catauction.com',
-  'sandhills.com',
-  'auctionnation.com',
-  'bringatrailer.com',
-  // Marketplace / seller sites
-  'amazon.com',
-  'walmart.com',
-  'etsy.com',
-  'mercari.com',
-  'poshmark.com',
-  'depop.com',
-  'shopify.com',
-  'alibaba.com',
-  'aliexpress.com',
-  'webstaurantstore.com',
-  'restaurantequipment.com',
-  'katom.com',
-  'centralrestaurant.com',
-  'acitydiscount.com',
-  'burkett.com',
-  'usedrestaurantequipment.com',
-  'excalibur.com',
-  'yelp.com',
-  'yellowpages.com',
-  'angieslist.com',
-  'thumbtack.com',
-  'homedepot.com',
-  'lowes.com',
-  'bestbuy.com',
-  'target.com',
-  'costco.com',
-  'samsclub.com',
-];
+const CITY_CLUSTERS = {
+  'san bernardino': ['San Bernardino', 'Redlands', 'Riverside', 'Yucaipa', 'Fontana', 'Ontario'],
+  'redlands':       ['Redlands', 'San Bernardino', 'Yucaipa', 'Loma Linda', 'Highland', 'Colton'],
+  'riverside':      ['Riverside', 'Moreno Valley', 'Corona', 'Colton', 'Norco', 'Jurupa Valley'],
+  'fontana':        ['Fontana', 'Rialto', 'San Bernardino', 'Rancho Cucamonga', 'Ontario', 'Colton'],
+  'ontario':        ['Ontario', 'Rancho Cucamonga', 'Fontana', 'Upland', 'Chino', 'Montclair'],
+  'rancho cucamonga':['Rancho Cucamonga', 'Ontario', 'Fontana', 'Upland', 'Claremont', 'Chino Hills'],
+  'colton':         ['Colton', 'San Bernardino', 'Rialto', 'Loma Linda', 'Fontana', 'Grand Terrace'],
+  'rialto':         ['Rialto', 'Fontana', 'Colton', 'San Bernardino', 'Bloomington', 'Grand Terrace'],
+  'moreno valley':  ['Moreno Valley', 'Riverside', 'Perris', 'Hemet', 'Beaumont', 'Banning'],
+  'corona':         ['Corona', 'Riverside', 'Norco', 'Eastvale', 'Jurupa Valley', 'Chino Hills'],
+  'upland':         ['Upland', 'Rancho Cucamonga', 'Ontario', 'Claremont', 'Montclair', 'Pomona'],
+  'victorville':    ['Victorville', 'Hesperia', 'Apple Valley', 'Adelanto', 'Barstow', 'Phelan'],
+  'hesperia':       ['Hesperia', 'Victorville', 'Apple Valley', 'Adelanto', 'Oak Hills', 'Phelan'],
+  'temecula':       ['Temecula', 'Murrieta', 'Menifee', 'Lake Elsinore', 'Wildomar', 'Perris'],
+  'murrieta':       ['Murrieta', 'Temecula', 'Menifee', 'Lake Elsinore', 'Wildomar', 'Canyon Lake'],
+  'yucaipa':        ['Yucaipa', 'Redlands', 'Calimesa', 'Beaumont', 'Banning', 'San Bernardino'],
+  'los angeles':    ['Los Angeles', 'Burbank', 'Glendale', 'Pasadena', 'Culver City', 'West Hollywood'],
+  'la':             ['Los Angeles', 'Burbank', 'Glendale', 'Pasadena', 'Culver City', 'West Hollywood'],
+  'long beach':     ['Long Beach', 'Compton', 'Carson', 'Torrance', 'Lakewood', 'Signal Hill'],
+  'burbank':        ['Burbank', 'Glendale', 'Los Angeles', 'Pasadena', 'Toluca Lake', 'North Hollywood'],
+  'glendale':       ['Glendale', 'Burbank', 'Los Angeles', 'Pasadena', 'La Crescenta', 'Montrose'],
+  'pasadena':       ['Pasadena', 'Glendale', 'Arcadia', 'Monrovia', 'Temple City', 'San Gabriel'],
+  'torrance':       ['Torrance', 'Carson', 'Redondo Beach', 'Gardena', 'Hawthorne', 'Lawndale'],
+  'pomona':         ['Pomona', 'Ontario', 'Chino', 'Diamond Bar', 'Walnut', 'La Verne'],
+  'inglewood':      ['Inglewood', 'Hawthorne', 'Gardena', 'Lawndale', 'Lennox', 'Culver City'],
+  'compton':        ['Compton', 'Carson', 'Gardena', 'Paramount', 'Lynwood', 'South Gate'],
+  'santa monica':   ['Santa Monica', 'Culver City', 'West Hollywood', 'Venice', 'Marina del Rey', 'Brentwood'],
+  'san diego':      ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Lemon Grove'],
+  'chula vista':    ['Chula Vista', 'San Diego', 'National City', 'Bonita', 'Eastlake', 'Otay Ranch'],
+  'el cajon':       ['El Cajon', 'La Mesa', 'Santee', 'San Diego', 'Spring Valley', 'Lakeside'],
+  'escondido':      ['Escondido', 'San Marcos', 'Vista', 'Oceanside', 'San Diego', 'Poway'],
+  'oceanside':      ['Oceanside', 'Carlsbad', 'Vista', 'Escondido', 'San Marcos', 'Camp Pendleton'],
+  'san francisco':  ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo'],
+  'sf':             ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo'],
+  'oakland':        ['Oakland', 'Berkeley', 'San Francisco', 'Hayward', 'San Leandro', 'Emeryville'],
+  'san jose':       ['San Jose', 'Santa Clara', 'Sunnyvale', 'Milpitas', 'Campbell', 'Los Gatos'],
+  'fremont':        ['Fremont', 'Newark', 'Union City', 'Hayward', 'Milpitas', 'San Leandro'],
+  'berkeley':       ['Berkeley', 'Oakland', 'Albany', 'Emeryville', 'El Cerrito', 'Richmond'],
+  'new york':       ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Yonkers'],
+  'nyc':            ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Yonkers'],
+  'brooklyn':       ['Brooklyn', 'Queens', 'New York', 'Staten Island', 'Hoboken', 'Jersey City'],
+  'queens':         ['Queens', 'Brooklyn', 'New York', 'Bronx', 'Nassau County', 'Long Island City'],
+  'bronx':          ['Bronx', 'New York', 'Yonkers', 'Mount Vernon', 'New Rochelle', 'Queens'],
+  'chicago':        ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Berwyn'],
+  'naperville':     ['Naperville', 'Aurora', 'Bolingbrook', 'Lisle', 'Downers Grove', 'Wheaton'],
+  'houston':        ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy'],
+  'katy':           ['Katy', 'Houston', 'Sugar Land', 'Richmond', 'Cypress', 'Fulshear'],
+  'dallas':         ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano'],
+  'fort worth':     ['Fort Worth', 'Dallas', 'Arlington', 'Mansfield', 'Euless', 'Bedford'],
+  'arlington':      ['Arlington', 'Dallas', 'Fort Worth', 'Irving', 'Grand Prairie', 'Mansfield'],
+  'plano':          ['Plano', 'Dallas', 'Frisco', 'Allen', 'McKinney', 'Richardson'],
+  'frisco':         ['Frisco', 'Plano', 'McKinney', 'Allen', 'Little Elm', 'Prosper'],
+  'phoenix':        ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Glendale'],
+  'scottsdale':     ['Scottsdale', 'Phoenix', 'Tempe', 'Paradise Valley', 'Fountain Hills', 'Mesa'],
+  'mesa':           ['Mesa', 'Chandler', 'Gilbert', 'Tempe', 'Phoenix', 'Scottsdale'],
+  'tempe':          ['Tempe', 'Phoenix', 'Mesa', 'Scottsdale', 'Chandler', 'Gilbert'],
+  'chandler':       ['Chandler', 'Gilbert', 'Tempe', 'Mesa', 'Ahwatukee', 'Sun Lakes'],
+  'seattle':        ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Shoreline'],
+  'bellevue':       ['Bellevue', 'Seattle', 'Redmond', 'Kirkland', 'Issaquah', 'Mercer Island'],
+  'tacoma':         ['Tacoma', 'Federal Way', 'Auburn', 'Kent', 'Puyallup', 'Lakewood'],
+  'denver':         ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster'],
+  'aurora':         ['Aurora', 'Denver', 'Centennial', 'Englewood', 'Parker', 'Lone Tree'],
+  'boulder':        ['Boulder', 'Longmont', 'Louisville', 'Lafayette', 'Broomfield', 'Westminster'],
+  'miami':          ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'Doral', 'Sweetwater'],
+  'fort lauderdale':['Fort Lauderdale', 'Hollywood', 'Pompano Beach', 'Deerfield Beach', 'Miramar', 'Pembroke Pines'],
+  'atlanta':        ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Brookhaven'],
+  'marietta':       ['Marietta', 'Atlanta', 'Smyrna', 'Kennesaw', 'Roswell', 'Acworth'],
+  'roswell':        ['Roswell', 'Alpharetta', 'Sandy Springs', 'Atlanta', 'Johns Creek', 'Dunwoody'],
+  'boston':         ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton'],
+  'cambridge':      ['Cambridge', 'Boston', 'Somerville', 'Medford', 'Arlington', 'Watertown'],
+  'worcester':      ['Worcester', 'Shrewsbury', 'Westborough', 'Millbury', 'Auburn', 'Leicester'],
+  'las vegas':      ['Las Vegas', 'Henderson', 'North Las Vegas', 'Enterprise', 'Spring Valley', 'Paradise'],
+  'henderson':      ['Henderson', 'Las Vegas', 'Boulder City', 'Enterprise', 'Green Valley', 'Whitney'],
+  'portland':       ['Portland', 'Beaverton', 'Gresham', 'Hillsboro', 'Lake Oswego', 'Tigard'],
+  'minneapolis':    ['Minneapolis', 'Saint Paul', 'Bloomington', 'Brooklyn Park', 'Plymouth', 'Maple Grove'],
+  'nashville':      ['Nashville', 'Murfreesboro', 'Franklin', 'Brentwood', 'Smyrna', 'Hendersonville'],
+  'memphis':        ['Memphis', 'Germantown', 'Bartlett', 'Collierville', 'Cordova', 'Lakeland'],
+  'baltimore':      ['Baltimore', 'Towson', 'Columbia', 'Catonsville', 'Dundalk', 'Rosedale'],
+  'washington':     ['Washington', 'Arlington', 'Alexandria', 'Silver Spring', 'Bethesda', 'Rockville'],
+  'dc':             ['Washington', 'Arlington', 'Alexandria', 'Silver Spring', 'Bethesda', 'Rockville'],
+  'charlotte':      ['Charlotte', 'Concord', 'Gastonia', 'Rock Hill', 'Huntersville', 'Matthews'],
+  'raleigh':        ['Raleigh', 'Durham', 'Cary', 'Chapel Hill', 'Apex', 'Garner'],
+  'orlando':        ['Orlando', 'Kissimmee', 'Sanford', 'Altamonte Springs', 'Winter Park', 'Apopka'],
+  'tampa':          ['Tampa', 'St. Petersburg', 'Clearwater', 'Brandon', 'Largo', 'Pinellas Park'],
+  'jacksonville':   ['Jacksonville', 'Orange Park', 'St. Augustine', 'Fernandina Beach', 'Middleburg', 'Ponte Vedra'],
+  'new orleans':    ['New Orleans', 'Metairie', 'Kenner', 'Chalmette', 'Gretna', 'Harvey'],
+  'kansas city':    ['Kansas City', 'Overland Park', 'Olathe', "Lee's Summit", 'Independence', 'Blue Springs'],
+  'st louis':       ['St. Louis', 'Clayton', 'Florissant', 'Chesterfield', 'Kirkwood', 'Ballwin'],
+  'indianapolis':   ['Indianapolis', 'Carmel', 'Fishers', 'Lawrence', 'Noblesville', 'Greenwood'],
+  'columbus':       ['Columbus', 'Dublin', 'Hilliard', 'Grove City', 'Westerville', 'Gahanna'],
+  'cleveland':      ['Cleveland', 'Parma', 'Lakewood', 'Euclid', 'Strongsville', 'Mentor'],
+  'cincinnati':     ['Cincinnati', 'Covington', 'Florence', 'Norwood', 'Mason', 'Fairfield'],
+  'pittsburgh':     ['Pittsburgh', 'Mt. Lebanon', 'Bethel Park', 'Penn Hills', 'Monroeville', 'Carnegie'],
+  'sacramento':     ['Sacramento', 'Elk Grove', 'Roseville', 'Folsom', 'Rancho Cordova', 'Citrus Heights'],
+  'fresno':         ['Fresno', 'Clovis', 'Madera', 'Tulare', 'Visalia', 'Selma'],
+  'bakersfield':    ['Bakersfield', 'Delano', 'Tehachapi', 'Wasco', 'Shafter', 'McFarland'],
+  'stockton':       ['Stockton', 'Modesto', 'Tracy', 'Manteca', 'Lodi', 'Turlock'],
+  'anaheim':        ['Anaheim', 'Orange', 'Santa Ana', 'Garden Grove', 'Fullerton', 'Buena Park'],
+  'santa ana':      ['Santa Ana', 'Anaheim', 'Orange', 'Garden Grove', 'Tustin', 'Irvine'],
+  'irvine':         ['Irvine', 'Santa Ana', 'Anaheim', 'Costa Mesa', 'Newport Beach', 'Tustin'],
+  'austin':         ['Austin', 'Round Rock', 'Cedar Park', 'Georgetown', 'Pflugerville', 'Kyle'],
+  'san antonio':    ['San Antonio', 'New Braunfels', 'Schertz', 'Converse', 'Universal City', 'Live Oak'],
+  'detroit':        ['Detroit', 'Dearborn', 'Warren', 'Sterling Heights', 'Livonia', 'Southfield'],
+  'milwaukee':      ['Milwaukee', 'Wauwatosa', 'West Allis', 'Brookfield', 'Greenfield', 'Oak Creek'],
+  'albuquerque':    ['Albuquerque', 'Rio Rancho', 'Santa Fe', 'Bernalillo', 'Corrales', 'Los Lunas'],
+  'tucson':         ['Tucson', 'Marana', 'Oro Valley', 'Sahuarita', 'Green Valley', 'Nogales'],
+  'el paso':        ['El Paso', 'Horizon City', 'Socorro', 'Anthony', 'Sunland Park', 'Las Cruces'],
+  'tulsa':          ['Tulsa', 'Broken Arrow', 'Owasso', 'Bixby', 'Jenks', 'Sand Springs'],
+  'oklahoma city':  ['Oklahoma City', 'Edmond', 'Mustang', 'Yukon', 'Moore', 'Midwest City'],
+  'omaha':          ['Omaha', 'Bellevue', 'Council Bluffs', 'Papillion', 'La Vista', 'Ralston'],
+  'richmond':       ['Richmond', 'Henrico', 'Chesterfield', 'Petersburg', 'Hopewell', 'Colonial Heights'],
+  'virginia beach': ['Virginia Beach', 'Norfolk', 'Chesapeake', 'Portsmouth', 'Hampton', 'Newport News'],
+  'norfolk':        ['Norfolk', 'Virginia Beach', 'Chesapeake', 'Portsmouth', 'Hampton', 'Suffolk'],
+  'buffalo':        ['Buffalo', 'Cheektowaga', 'Amherst', 'Tonawanda', 'Niagara Falls', 'Lackawanna'],
+  'jersey city':    ['Jersey City', 'Newark', 'Hoboken', 'Union City', 'Bayonne', 'Weehawken'],
+  'newark':         ['Newark', 'Jersey City', 'Elizabeth', 'Paterson', 'Union City', 'Hoboken'],
+};
+
+function getCityCluster(location) {
+  const locLower = location.toLowerCase().replace(/,.*$/, '').trim();
+  if (CITY_CLUSTERS[locLower]) return CITY_CLUSTERS[locLower];
+  return [location.replace(/,.*$/, '').trim()];
+}
+
+function buildLocationFilter(location, radius) {
+  if (radius === '100') return '';
+  const cities = getCityCluster(location);
+  if (cities.length === 1) return ` "${cities[0]}"`;
+  return ` (${cities.map(c => `"${c}"`).join(' OR ')})`;
+}
 
 // ─────────────────────────────────────────────────────────────
-// SELLER PHRASE BLACKLIST
-// If ANY of these appear in the post — discard immediately
+// DOMAIN BLACKLIST
+// ─────────────────────────────────────────────────────────────
+const BLOCKED_DOMAINS = [
+  'ebay.com', 'proxibid.com', 'bidspotter.com', 'govplanet.com',
+  'ironplanet.com', 'ritchiebros.com', 'rbauction.com', 'purplewave.com',
+  'bidadoo.com', 'auctionzip.com', 'liveauctioneers.com', 'invaluable.com',
+  'hibid.com', 'auctiontime.com', 'bringatrailer.com', 'amazon.com',
+  'walmart.com', 'etsy.com', 'mercari.com', 'poshmark.com', 'depop.com',
+  'shopify.com', 'alibaba.com', 'aliexpress.com', 'webstaurantstore.com',
+  'restaurantequipment.com', 'katom.com', 'centralrestaurant.com',
+  'acitydiscount.com', 'burkett.com', 'yelp.com', 'yellowpages.com',
+  'homedepot.com', 'lowes.com', 'bestbuy.com', 'target.com',
+  'costco.com', 'samsclub.com', 'duckduckgo.com',
+];
+
+function isBlockedDomain(url) {
+  try {
+    const hostname = new URL(url).hostname.replace('www.', '');
+    return BLOCKED_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
+  } catch { return false; }
+}
+
+// ─────────────────────────────────────────────────────────────
+// SELLER BLACKLIST
 // ─────────────────────────────────────────────────────────────
 const SELLER_PHRASES = [
-  'for sale',
-  'i am selling',
-  "i'm selling",
-  'selling my',
-  'selling a ',
-  'selling an ',
-  'selling these',
-  'selling this',
-  'asking price',
-  'asking $',
-  'price is',
-  'priced at',
-  ' obo',
-  'or best offer',
-  'firm price',
-  'shipped for',
-  'free shipping',
-  'buy it now',
-  'pick up only',
-  'local pickup',
-  'dm for price',
-  'message for price',
-  'comment to buy',
-  'available for',
-  'just reduced',
-  'price drop',
-  'make an offer',
-  'taking offers',
-  'open to offers',
-  'willing to ship',
-  'will ship',
-  'can ship',
-  'paypal accepted',
-  'venmo accepted',
-  'cash only',
-  'cash preferred',
-  'motivated seller',
-  'must sell',
-  'need to sell',
-  'gotta sell',
-  'letting go',
-  'letting it go',
-  'parting with',
-  'getting rid of',
-  'moving sale',
-  'estate sale',
-  'garage sale',
-  'yard sale',
-  'auction',
-  'bidding',
-  'starting bid',
-  'reserve price',
-  'lot of',
-  'wholesale',
-  'bulk pricing',
-  'dealer pricing',
-  'manufacturer',
-  'brand new in box',
-  'new in box',
-  'never used',
-  'never opened',
-  'sealed in box',
+  'for sale', 'i am selling', "i'm selling", 'selling my', 'selling a ',
+  'selling an ', 'selling these', 'selling this', 'asking price', 'asking $',
+  'price is', 'priced at', ' obo', 'or best offer', 'firm price',
+  'shipped for', 'free shipping', 'buy it now', 'pick up only', 'local pickup',
+  'dm for price', 'message for price', 'just reduced', 'price drop',
+  'make an offer', 'taking offers', 'open to offers', 'willing to ship',
+  'will ship', 'can ship', 'paypal accepted', 'venmo accepted',
+  'cash only', 'cash preferred', 'motivated seller', 'must sell',
+  'need to sell', 'gotta sell', 'letting go', 'letting it go',
+  'parting with', 'getting rid of', 'moving sale', 'estate sale',
+  'garage sale', 'yard sale', 'auction', 'bidding', 'starting bid',
+  'reserve price', 'wholesale', 'bulk pricing', 'brand new in box',
+  'new in box', 'never used', 'never opened', 'sealed in box',
 ];
 
 // ─────────────────────────────────────────────────────────────
 // BUYER INTENT PHRASES — scored
 // ─────────────────────────────────────────────────────────────
 const BUYER_PHRASES_SCORED = [
-  // Strong signals (3 points)
   { phrase: ' iso ',             score: 3 },
   { phrase: ' wtb ',             score: 3 },
   { phrase: 'want to buy',       score: 3 },
@@ -157,7 +207,6 @@ const BUYER_PHRASES_SCORED = [
   { phrase: 'need to buy',       score: 3 },
   { phrase: 'i need to buy',     score: 3 },
   { phrase: 'trying to buy',     score: 3 },
-  // Medium signals (2 points)
   { phrase: 'looking for',       score: 2 },
   { phrase: 'searching for',     score: 2 },
   { phrase: 'trying to find',    score: 2 },
@@ -172,13 +221,11 @@ const BUYER_PHRASES_SCORED = [
   { phrase: 'where can i get',   score: 2 },
   { phrase: 'where do i find',   score: 2 },
   { phrase: 'where do i get',    score: 2 },
-  // Weaker signals (1 point — not enough alone)
   { phrase: 'i need a',          score: 1 },
   { phrase: 'i need an',         score: 1 },
   { phrase: 'trying to get',     score: 1 },
   { phrase: 'who has',           score: 1 },
   { phrase: 'who sells',         score: 1 },
-  { phrase: 'can anyone sell',   score: 1 },
 ];
 
 const COMMERCIAL_EXTRA = [
@@ -206,45 +253,18 @@ const COMMERCIAL_EXTRA = [
   { phrase: 'need for catering',           score: 1 },
 ];
 
-// Raised from 2 to 3 — only strong buyer signals pass
 const MIN_BUYER_SCORE = 3;
-
-// ─────────────────────────────────────────────────────────────
-// CORE FILTER
-// ─────────────────────────────────────────────────────────────
-function isBlockedDomain(url) {
-  try {
-    const hostname = new URL(url).hostname.replace('www.', '');
-    return BLOCKED_DOMAINS.some(d => hostname === d || hostname.endsWith(`.${d}`));
-  } catch {
-    return false;
-  }
-}
 
 function getBuyerScore(text, item, mode) {
   const t = ` ${text.toLowerCase()} `;
-
-  // Must mention the item
   if (!t.includes(item.toLowerCase())) return 0;
-
-  // Instantly discard if ANY seller phrase present
   if (SELLER_PHRASES.some(p => t.includes(p))) return 0;
-
-  // Score buyer intent
   const phrases = mode === 'commercial'
     ? [...BUYER_PHRASES_SCORED, ...COMMERCIAL_EXTRA]
     : BUYER_PHRASES_SCORED;
-
   let score = 0;
-  phrases.forEach(({ phrase, score: s }) => {
-    if (t.includes(phrase)) score += s;
-  });
-
+  phrases.forEach(({ phrase, score: s }) => { if (t.includes(phrase)) score += s; });
   return score;
-}
-
-function isBuyerPost(text, item, mode) {
-  return getBuyerScore(text, item, mode) >= MIN_BUYER_SCORE;
 }
 
 function getMatchedPhrase(text, mode) {
@@ -258,140 +278,72 @@ function getMatchedPhrase(text, mode) {
   return match ? match.phrase.trim() : 'buyer intent';
 }
 
-// ─────────────────────────────────────────────────────────────
-// NEARBY CITIES
-// ─────────────────────────────────────────────────────────────
-const NEARBY_CITIES = {
-  'san bernardino': {
-    10: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland'],
-    20: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda'],
-    30: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont'],
-    50: ['San Bernardino', 'Colton', 'Rialto', 'Fontana', 'Highland', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Loma Linda', 'Riverside', 'Moreno Valley', 'Upland', 'Claremont', 'Pomona', 'Corona', 'Victorville', 'Hesperia', 'Chino', 'Chino Hills'],
-  },
-  'riverside': {
-    10: ['Riverside', 'Moreno Valley', 'Corona', 'Norco'],
-    20: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley'],
-    30: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula'],
-    50: ['Riverside', 'Moreno Valley', 'Corona', 'Norco', 'Colton', 'San Bernardino', 'Perris', 'Jurupa Valley', 'Ontario', 'Rancho Cucamonga', 'Redlands', 'Temecula', 'Hemet', 'Murrieta', 'Lake Elsinore', 'Pomona', 'Chino'],
-  },
-  'los angeles': {
-    10: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena'],
-    20: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica'],
-    30: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey'],
-    50: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Pasadena', 'Long Beach', 'Torrance', 'Inglewood', 'Compton', 'El Monte', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Hawthorne', 'Downey', 'Anaheim', 'Orange', 'Irvine', 'Santa Ana', 'San Bernardino'],
-  },
-  'la': {
-    10: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale'],
-    20: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica'],
-    30: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey'],
-    50: ['Los Angeles', 'West Hollywood', 'Culver City', 'Burbank', 'Glendale', 'Long Beach', 'Torrance', 'Inglewood', 'Santa Monica', 'Pomona', 'Ontario', 'Carson', 'Downey', 'Anaheim', 'Irvine', 'San Bernardino'],
-  },
-  'san diego': {
-    10: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee'],
-    20: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley'],
-    30: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos'],
-    50: ['San Diego', 'Chula Vista', 'El Cajon', 'La Mesa', 'Santee', 'Escondido', 'National City', 'Lemon Grove', 'Spring Valley', 'Oceanside', 'Vista', 'San Marcos', 'Carlsbad', 'Temecula', 'Murrieta'],
-  },
-  'san francisco': {
-    10: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco'],
-    20: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro'],
-    30: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City'],
-    50: ['San Francisco', 'Oakland', 'Berkeley', 'Daly City', 'South San Francisco', 'San Mateo', 'Fremont', 'Hayward', 'San Leandro', 'San Jose', 'Santa Clara', 'Sunnyvale', 'Redwood City', 'Palo Alto', 'Mountain View', 'Concord', 'Vallejo'],
-  },
-  'new york': {
-    10: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken'],
-    20: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island'],
-    30: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle'],
-    50: ['New York', 'Brooklyn', 'Queens', 'Bronx', 'Jersey City', 'Hoboken', 'Newark', 'Yonkers', 'Staten Island', 'Paterson', 'Elizabeth', 'New Rochelle', 'Bridgeport', 'Stamford', 'Hartford'],
-  },
-  'chicago': {
-    10: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie'],
-    20: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan'],
-    30: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond'],
-    50: ['Chicago', 'Evanston', 'Oak Park', 'Cicero', 'Skokie', 'Naperville', 'Aurora', 'Joliet', 'Waukegan', 'Elgin', 'Schaumburg', 'Palatine', 'Hammond', 'Gary', 'Kenosha', 'Rockford'],
-  },
-  'houston': {
-    10: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City'],
-    20: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City'],
-    30: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'The Woodlands', 'Conroe', 'Friendswood'],
-    50: ['Houston', 'Pasadena', 'Pearland', 'Sugar Land', 'Missouri City', 'Katy', 'Baytown', 'League City', 'The Woodlands', 'Conroe', 'Friendswood', 'Galveston', 'Beaumont'],
-  },
-  'dallas': {
-    10: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland'],
-    20: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton'],
-    30: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville'],
-    50: ['Dallas', 'Fort Worth', 'Arlington', 'Irving', 'Garland', 'Plano', 'Mesquite', 'Grand Prairie', 'Carrollton', 'McKinney', 'Frisco', 'Denton', 'Lewisville', 'Allen', 'Richardson', 'Waco'],
-  },
-  'phoenix': {
-    10: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler'],
-    20: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise'],
-    30: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye'],
-    50: ['Phoenix', 'Scottsdale', 'Tempe', 'Mesa', 'Chandler', 'Gilbert', 'Glendale', 'Peoria', 'Surprise', 'Avondale', 'Goodyear', 'Buckeye', 'Casa Grande', 'Queen Creek'],
-  },
-  'seattle': {
-    10: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton'],
-    20: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn'],
-    30: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood'],
-    50: ['Seattle', 'Bellevue', 'Redmond', 'Kirkland', 'Renton', 'Tacoma', 'Federal Way', 'Kent', 'Auburn', 'Everett', 'Marysville', 'Lynnwood', 'Olympia', 'Bellingham'],
-  },
-  'denver': {
-    10: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada'],
-    20: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton'],
-    30: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City'],
-    50: ['Denver', 'Aurora', 'Lakewood', 'Englewood', 'Arvada', 'Westminster', 'Thornton', 'Centennial', 'Littleton', 'Boulder', 'Broomfield', 'Commerce City', 'Fort Collins', 'Longmont', 'Greeley'],
-  },
-  'miami': {
-    10: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami'],
-    20: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar'],
-    30: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall'],
-    50: ['Miami', 'Miami Beach', 'Hialeah', 'Coral Gables', 'South Miami', 'Fort Lauderdale', 'Hollywood', 'Pembroke Pines', 'Miramar', 'Homestead', 'Doral', 'Kendall', 'Boca Raton', 'West Palm Beach', 'Pompano Beach'],
-  },
-  'atlanta': {
-    10: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta'],
-    20: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point'],
-    30: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville'],
-    50: ['Atlanta', 'Decatur', 'Sandy Springs', 'Smyrna', 'Marietta', 'Roswell', 'Alpharetta', 'College Park', 'East Point', 'Lawrenceville', 'Peachtree City', 'Douglasville', 'Gainesville', 'Newnan', 'Rome'],
-  },
-  'boston': {
-    10: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline'],
-    20: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton'],
-    30: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence'],
-    50: ['Boston', 'Cambridge', 'Somerville', 'Quincy', 'Brookline', 'Newton', 'Lynn', 'Lowell', 'Brockton', 'Worcester', 'Salem', 'Lawrence', 'Providence', 'Manchester'],
-  },
-  'las vegas': {
-    10: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise'],
-    20: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley'],
-    30: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump'],
-    50: ['Las Vegas', 'Henderson', 'North Las Vegas', 'Summerlin', 'Paradise', 'Boulder City', 'Enterprise', 'Spring Valley', 'Mesquite', 'Pahrump', 'St. George'],
-  },
-};
-
-function getNearbyKeywords(location, radius) {
-  if (radius === '100') return null;
-  const locLower = location.toLowerCase().replace(/,.*$/, '').trim();
-  const radiusNum = parseInt(radius);
-  const tier = radiusNum <= 10 ? 10 : radiusNum <= 20 ? 20 : radiusNum <= 30 ? 30 : 50;
-  const cityData = NEARBY_CITIES[locLower];
-  if (cityData && cityData[tier]) return cityData[tier];
-  return [location.replace(/,.*$/, '').trim()];
-}
-
-function buildLocationFilter(location, radius) {
-  if (radius === '100') return '';
-  const cities = getNearbyKeywords(location, radius);
-  if (!cities || cities.length === 0) return '';
-  if (cities.length === 1) return ` "${cities[0]}"`;
-  return ` (${cities.map(c => `"${c}"`).join(' OR ')})`;
-}
-
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
   'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
   'Accept-Language': 'en-US,en;q=0.9',
+  'Accept-Encoding': 'gzip, deflate, br',
+  'Connection': 'keep-alive',
 };
 
-function sleep(ms) {
-  return new Promise(r => setTimeout(r, ms));
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+// ─────────────────────────────────────────────────────────────
+// DUCKDUCKGO SCRAPER
+// Replaces SerpApi — free, no key needed
+// Retries up to 3 times if rate limited
+// ─────────────────────────────────────────────────────────────
+async function searchDuckDuckGo(query, retries = 3) {
+  for (let attempt = 0; attempt < retries; attempt++) {
+    try {
+      // Step 1: Get vqd token (required by DDG)
+      const initRes = await axios.get(
+        `https://html.duckduckgo.com/html/?q=${encodeURIComponent(query)}`,
+        {
+          headers: {
+            ...HEADERS,
+            'Referer': 'https://duckduckgo.com/',
+          },
+          timeout: 12000,
+        }
+      );
+
+      const $ = cheerio.load(initRes.data);
+      const results = [];
+
+      // Parse search results
+      $('.result, .web-result').each((i, el) => {
+        if (results.length >= 10) return;
+
+        const titleEl = $(el).find('.result__title, .result__a, a.result__a').first();
+        const snippetEl = $(el).find('.result__snippet, .result__body').first();
+        const linkEl = $(el).find('a.result__url, .result__title a, a[href]').first();
+
+        const title = titleEl.text().trim();
+        let href = linkEl.attr('href') || titleEl.attr('href') || '';
+
+        // DDG wraps URLs — extract the real one
+        if (href.includes('//duckduckgo.com/l/') || href.startsWith('/l/')) {
+          try {
+            const urlParams = new URLSearchParams(href.split('?')[1]);
+            href = urlParams.get('uddg') || urlParams.get('u') || href;
+          } catch { /* keep original */ }
+        }
+
+        const snippet = snippetEl.text().trim();
+
+        if (!title || !href || !href.startsWith('http')) return;
+        results.push({ title, link: href, snippet });
+      });
+
+      return results;
+
+    } catch (err) {
+      console.error(`DDG attempt ${attempt + 1} failed:`, err.message);
+      if (attempt < retries - 1) await sleep(1500 * (attempt + 1));
+    }
+  }
+  return [];
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -413,13 +365,10 @@ async function searchReddit(item, location, radius, mode) {
 
   for (const q of queries) {
     try {
-      const encoded = encodeURIComponent(q);
-      const url = `https://www.reddit.com/search.json?q=${encoded}&sort=new&limit=15&type=link`;
-
-      const res = await axios.get(url, {
-        headers: { 'User-Agent': 'BuyerRadar/1.0', 'Accept': 'application/json' },
-        timeout: 10000,
-      });
+      const res = await axios.get(
+        `https://www.reddit.com/search.json?q=${encodeURIComponent(q)}&sort=new&limit=15&type=link`,
+        { headers: { 'User-Agent': 'BuyerRadar/1.0', 'Accept': 'application/json' }, timeout: 10000 }
+      );
 
       (res.data?.data?.children || []).forEach(post => {
         const d = post.data;
@@ -429,24 +378,16 @@ async function searchReddit(item, location, radius, mode) {
         if (results.find(r => r.url === postUrl)) return;
         const score = getBuyerScore(fullText, item, mode);
         if (score < MIN_BUYER_SCORE) return;
-
         results.push({
-          url: postUrl,
-          title: d.title,
+          url: postUrl, title: d.title,
           snippet: d.selftext ? d.selftext.slice(0, 200) : `r/${d.subreddit} · ${d.score} upvotes`,
-          platform: 'Reddit',
-          color: '#ff6314',
-          phraseLabel: getMatchedPhrase(fullText, mode),
-          buyerScore: score,
+          platform: 'Reddit', color: '#ff6314',
+          phraseLabel: getMatchedPhrase(fullText, mode), buyerScore: score,
         });
       });
-
       await sleep(500);
-    } catch (err) {
-      console.error('Reddit error:', err.message);
-    }
+    } catch (err) { console.error('Reddit error:', err.message); }
   }
-
   return results;
 }
 
@@ -461,12 +402,43 @@ async function searchCraigslist(item, location, radius, mode) {
     'san diego': 'sandiego', 'san francisco': 'sfbay', 'sf': 'sfbay',
     'new york': 'newyork', 'nyc': 'newyork', 'chicago': 'chicago',
     'houston': 'houston', 'phoenix': 'phoenix', 'philadelphia': 'philadelphia',
-    'san antonio': 'sanantonio', 'dallas': 'dallas', 'seattle': 'seattle',
-    'denver': 'denver', 'boston': 'boston', 'atlanta': 'atlanta',
-    'miami': 'miami', 'portland': 'portland', 'las vegas': 'lasvegas',
+    'san antonio': 'sanantonio', 'dallas': 'dallas', 'fort worth': 'dallas',
+    'arlington': 'dallas', 'plano': 'dallas', 'frisco': 'dallas',
+    'seattle': 'seattle', 'bellevue': 'seattle', 'tacoma': 'seattle',
+    'denver': 'denver', 'aurora': 'denver', 'boulder': 'boulder',
+    'boston': 'boston', 'cambridge': 'boston', 'worcester': 'worcester',
+    'atlanta': 'atlanta', 'marietta': 'atlanta', 'roswell': 'atlanta',
+    'miami': 'miami', 'fort lauderdale': 'miami',
+    'portland': 'portland', 'las vegas': 'lasvegas', 'henderson': 'lasvegas',
     'riverside': 'inlandempire', 'san bernardino': 'inlandempire',
     'ontario': 'inlandempire', 'rancho cucamonga': 'inlandempire',
-    'colton': 'inlandempire',
+    'colton': 'inlandempire', 'fontana': 'inlandempire',
+    'rialto': 'inlandempire', 'redlands': 'inlandempire',
+    'yucaipa': 'inlandempire', 'moreno valley': 'inlandempire',
+    'corona': 'inlandempire', 'temecula': 'inlandempire',
+    'murrieta': 'inlandempire', 'upland': 'inlandempire',
+    'victorville': 'victorville', 'hesperia': 'victorville',
+    'sacramento': 'sacramento', 'fresno': 'fresno',
+    'bakersfield': 'bakersfield', 'stockton': 'stockton',
+    'anaheim': 'orangecounty', 'santa ana': 'orangecounty',
+    'irvine': 'orangecounty', 'long beach': 'longbeach',
+    'san jose': 'sfbay', 'oakland': 'sfbay', 'berkeley': 'sfbay',
+    'fremont': 'sfbay', 'scottsdale': 'phoenix', 'mesa': 'phoenix',
+    'tempe': 'phoenix', 'chandler': 'phoenix',
+    'nashville': 'nashville', 'memphis': 'memphis',
+    'baltimore': 'baltimore', 'washington': 'washingtondc', 'dc': 'washingtondc',
+    'charlotte': 'charlotte', 'raleigh': 'raleigh',
+    'orlando': 'orlando', 'tampa': 'tampa', 'jacksonville': 'jacksonville',
+    'new orleans': 'neworleans', 'kansas city': 'kansascity',
+    'st louis': 'stlouis', 'indianapolis': 'indianapolis',
+    'columbus': 'columbus', 'cleveland': 'cleveland',
+    'cincinnati': 'cincinnati', 'pittsburgh': 'pittsburgh',
+    'detroit': 'detroit', 'milwaukee': 'milwaukee', 'minneapolis': 'minneapolis',
+    'albuquerque': 'albuquerque', 'tucson': 'tucson', 'el paso': 'elpaso',
+    'austin': 'austin', 'tulsa': 'tulsa', 'oklahoma city': 'oklahomacity',
+    'omaha': 'omaha', 'richmond': 'richmond',
+    'virginia beach': 'norfolk', 'norfolk': 'norfolk',
+    'buffalo': 'buffalo', 'jersey city': 'newjersey', 'newark': 'newjersey',
   };
 
   const locLower = location.toLowerCase().replace(/,.*$/, '').trim();
@@ -481,7 +453,6 @@ async function searchCraigslist(item, location, radius, mode) {
         headers: { ...HEADERS, 'Accept': 'application/rss+xml, application/xml, text/xml' },
         timeout: 10000,
       });
-
       const $ = cheerio.load(res.data, { xmlMode: true });
 
       $('item').each((i, el) => {
@@ -489,14 +460,11 @@ async function searchCraigslist(item, location, radius, mode) {
         const title = $(el).find('title').first().text().trim();
         const link = $(el).find('link').first().text().trim();
         const description = $(el).find('description').first().text().trim();
-        if (!title || !link) return;
-        if (isBlockedDomain(link)) return;
-
+        if (!title || !link || isBlockedDomain(link)) return;
         const combined = `${title} ${description}`;
         if (!combined.toLowerCase().includes(item.toLowerCase())) return;
         if (results.find(r => r.url === link)) return;
 
-        // Wanted section = buyer by definition, just check seller blacklist
         if (section === 'wan') {
           const t = ` ${combined.toLowerCase()} `;
           if (SELLER_PHRASES.some(p => t.includes(p))) return;
@@ -505,21 +473,15 @@ async function searchCraigslist(item, location, radius, mode) {
         }
 
         results.push({
-          url: link,
-          title,
+          url: link, title,
           snippet: description ? description.slice(0, 200) : 'Craigslist WANTED — looking to buy',
-          platform: 'Craigslist',
-          color: '#a855f7',
+          platform: 'Craigslist', color: '#a855f7',
           phraseLabel: section === 'wan' ? 'craigslist wanted' : getMatchedPhrase(combined, mode),
           buyerScore: section === 'wan' ? 3 : getBuyerScore(combined, item, mode),
         });
       });
-
-    } catch (err) {
-      console.error(`Craigslist error (${section}):`, err.message);
-    }
+    } catch (err) { console.error(`Craigslist error (${section}):`, err.message); }
   }
-
   return results;
 }
 
@@ -528,16 +490,11 @@ async function searchCraigslist(item, location, radius, mode) {
 // ─────────────────────────────────────────────────────────────
 async function searchX(item, location, radius, mode) {
   const results = [];
-
   const nitterInstances = [
-    'https://nitter.privacydev.net',
-    'https://nitter.poast.org',
-    'https://nitter.1d4.us',
-    'https://nitter.space',
+    'https://nitter.privacydev.net', 'https://nitter.poast.org',
+    'https://nitter.1d4.us', 'https://nitter.space',
   ];
-
   const locFilter = buildLocationFilter(location, radius);
-
   const intentQueries = mode === 'commercial' ? [
     `"ISO" "${item}" commercial${locFilter}`,
     `"WTB" "${item}" commercial${locFilter}`,
@@ -551,7 +508,6 @@ async function searchX(item, location, radius, mode) {
 
   for (const instance of nitterInstances) {
     let instanceWorking = false;
-
     for (const q of intentQueries) {
       try {
         const res = await axios.get(`${instance}/search?f=tweets&q=${encodeURIComponent(q)}`, {
@@ -561,7 +517,6 @@ async function searchX(item, location, radius, mode) {
         const items = $('.timeline-item, .tweet-body');
         if (items.length === 0) continue;
         instanceWorking = true;
-
         items.each((i, el) => {
           if (results.length >= 12) return;
           const text = $(el).find('.tweet-content, .content').text().trim();
@@ -571,56 +526,42 @@ async function searchX(item, location, radius, mode) {
           if (score < MIN_BUYER_SCORE) return;
           const fullUrl = `https://x.com${link.replace(/^\/[^/]+/, '')}`;
           if (results.find(r => r.url === fullUrl)) return;
-
           results.push({
-            url: fullUrl,
-            title: text.slice(0, 100),
-            snippet: text.slice(0, 200),
-            platform: 'X (Twitter)',
-            color: '#e7e7e7',
-            phraseLabel: getMatchedPhrase(text, mode),
-            buyerScore: score,
+            url: fullUrl, title: text.slice(0, 100), snippet: text.slice(0, 200),
+            platform: 'X (Twitter)', color: '#e7e7e7',
+            phraseLabel: getMatchedPhrase(text, mode), buyerScore: score,
           });
         });
-
         await sleep(400);
-      } catch (err) {
-        console.error(`Nitter error:`, err.message);
-      }
+      } catch (err) { console.error(`Nitter error:`, err.message); }
     }
-
     if (instanceWorking) break;
   }
-
   return results;
 }
 
 // ─────────────────────────────────────────────────────────────
-// GOOGLE — SerpApi with domain blacklist
+// DUCKDUCKGO WEB SEARCH
+// Replaces Google/SerpApi — completely free
 // ─────────────────────────────────────────────────────────────
-async function searchGoogle(item, location, radius, mode) {
+async function searchWeb(item, location, radius, mode) {
   const results = [];
-  if (!process.env.SERPAPI_KEY) return results;
-
   const locFilter = buildLocationFilter(location, radius);
-  const primaryCity = location.replace(/,.*$/, '').trim();
 
-  // Build exclude string from blocked domains
   const domainExcludes = [
-    'reddit.com', 'craigslist.org', 'x.com', 'twitter.com',
-    'offerup.com', 'nextdoor.com', 'ebay.com', 'amazon.com',
-    'etsy.com', 'walmart.com', 'bidspotter.com', 'proxibid.com',
-    'govplanet.com', 'ironplanet.com', 'ritchiebros.com',
-    'liveauctioneers.com', 'hibid.com', 'auctionzip.com',
-    'webstaurantstore.com', 'katom.com', 'restaurantequipment.com',
-  ].map(d => `-site:${d}`).join(' ');
+    '-site:reddit.com', '-site:craigslist.org', '-site:x.com',
+    '-site:twitter.com', '-site:offerup.com', '-site:ebay.com',
+    '-site:amazon.com', '-site:etsy.com', '-site:walmart.com',
+    '-site:bidspotter.com', '-site:proxibid.com', '-site:govplanet.com',
+    '-site:ironplanet.com', '-site:ritchiebros.com', '-site:liveauctioneers.com',
+    '-site:hibid.com', '-site:webstaurantstore.com', '-site:katom.com',
+  ].join(' ');
 
   const intentQueries = mode === 'commercial' ? [
     `"ISO" "${item}" commercial${locFilter} ${domainExcludes}`,
     `"WTB" "${item}" commercial${locFilter} ${domainExcludes}`,
     `"looking for" "${item}" restaurant${locFilter} ${domainExcludes}`,
     `"opening a restaurant" "${item}"${locFilter} ${domainExcludes}`,
-    `"used commercial kitchen equipment" "${item}"${locFilter} ${domainExcludes}`,
   ] : [
     `"ISO" "${item}"${locFilter} ${domainExcludes}`,
     `"WTB" "${item}"${locFilter} ${domainExcludes}`,
@@ -631,97 +572,26 @@ async function searchGoogle(item, location, radius, mode) {
 
   for (const q of intentQueries) {
     try {
-      const params = new URLSearchParams({
-        api_key: process.env.SERPAPI_KEY,
-        engine: 'google',
-        q,
-        num: '10',
-        tbs: 'qdr:m',
-        gl: 'us',
-        hl: 'en',
-        location: radius !== '100' ? `${primaryCity}, United States` : 'United States',
-      });
+      const ddgResults = await searchDuckDuckGo(q);
 
-      const res = await axios.get(`https://serpapi.com/search.json?${params.toString()}`, { timeout: 10000 });
-      if (res.data.error) continue;
-
-      (res.data.organic_results || []).forEach(r => {
-        if (!r.link) return;
-        if (isBlockedDomain(r.link)) return;
+      ddgResults.forEach(r => {
+        if (!r.link || isBlockedDomain(r.link)) return;
         if (results.find(x => x.url === r.link)) return;
-
         const combined = `${r.title || ''} ${r.snippet || ''}`;
         const score = getBuyerScore(combined, item, mode);
         if (score < MIN_BUYER_SCORE) return;
-
         results.push({
-          url: r.link,
-          title: r.title || 'View Post',
-          snippet: r.snippet || '',
-          platform: 'Google',
-          color: '#00d4ff',
-          phraseLabel: getMatchedPhrase(combined, mode),
-          buyerScore: score,
+          url: r.link, title: r.title || 'View Post', snippet: r.snippet || '',
+          platform: 'Web', color: '#00d4ff',
+          phraseLabel: getMatchedPhrase(combined, mode), buyerScore: score,
         });
       });
 
-      await sleep(300);
-    } catch (err) {
-      console.error('SerpApi error:', err.message);
-    }
+      await sleep(800); // be gentle with DDG
+    } catch (err) { console.error('DDG search error:', err.message); }
   }
 
   return results.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
-}
-
-// ─────────────────────────────────────────────────────────────
-// NEXTDOOR — SerpApi
-// ─────────────────────────────────────────────────────────────
-async function searchNextdoor(item, location, radius, mode) {
-  const results = [];
-  if (!process.env.SERPAPI_KEY) return results;
-
-  const locFilter = buildLocationFilter(location, radius);
-  const intentPart = mode === 'commercial'
-    ? `("ISO" OR "WTB" OR "looking for" OR "need" OR "opening a restaurant" OR "catering")`
-    : `("ISO" OR "WTB" OR "looking for" OR "want to buy" OR "in search of" OR "does anyone have")`;
-
-  try {
-    const params = new URLSearchParams({
-      api_key: process.env.SERPAPI_KEY,
-      engine: 'google',
-      q: `site:nextdoor.com ${intentPart} "${item}"${locFilter}`,
-      num: '10',
-      tbs: 'qdr:m',
-      gl: 'us',
-      hl: 'en',
-    });
-
-    const res = await axios.get(`https://serpapi.com/search.json?${params.toString()}`, { timeout: 10000 });
-
-    (res.data.organic_results || []).forEach(r => {
-      if (!r.link || !r.link.includes('nextdoor.com')) return;
-      if (results.find(x => x.url === r.link)) return;
-      const combined = `${r.title || ''} ${r.snippet || ''}`;
-      const score = getBuyerScore(combined, item, mode);
-      if (score < MIN_BUYER_SCORE) return;
-
-      results.push({
-        url: r.link,
-        title: r.title || 'Nextdoor Post',
-        snippet: r.snippet || 'Nextdoor post — click to view',
-        platform: 'Nextdoor',
-        color: '#f472b6',
-        phraseLabel: getMatchedPhrase(combined, mode),
-        buyerScore: score,
-      });
-    });
-
-  } catch (err) {
-    console.error('Nextdoor error:', err.message);
-  }
-
-  return results;
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -732,37 +602,30 @@ app.post('/api/search', async (req, res) => {
   if (!item || !location) return res.status(400).json({ error: 'item and location are required' });
 
   const searchMode = mode === 'commercial' ? 'commercial' : 'general';
-  console.log(`\n◉ [${searchMode.toUpperCase()}] "${item}" near ${location} (${radius} mi)`);
+  const cluster = getCityCluster(location);
+  console.log(`\n◉ [${searchMode.toUpperCase()}] "${item}" in ${cluster.join(', ')}`);
 
   try {
-    const [reddit, craigslist, x, nextdoor, google] = await Promise.allSettled([
+    const [reddit, craigslist, x, web] = await Promise.allSettled([
       searchReddit(item, location, radius, searchMode),
       searchCraigslist(item, location, radius, searchMode),
       searchX(item, location, radius, searchMode),
-      searchNextdoor(item, location, radius, searchMode),
-      searchGoogle(item, location, radius, searchMode),
+      searchWeb(item, location, radius, searchMode),
     ]);
 
     const extract = r => r.status === 'fulfilled' ? r.value : [];
-
     const allResults = [
-      ...extract(reddit),
-      ...extract(craigslist),
-      ...extract(x),
-      ...extract(nextdoor),
-      ...extract(google),
+      ...extract(reddit), ...extract(craigslist),
+      ...extract(x), ...extract(web),
     ];
 
     const seen = new Set();
     const unique = allResults.filter(r => {
       if (seen.has(r.url)) return false;
-      seen.add(r.url);
-      return true;
+      seen.add(r.url); return true;
     });
 
-    // Sort strongest buyer signals first
     unique.sort((a, b) => (b.buyerScore || 0) - (a.buyerScore || 0));
-
     console.log(`◉ Found ${unique.length} verified buyer posts`);
 
     return res.json({
@@ -771,11 +634,10 @@ app.post('/api/search', async (req, res) => {
         Reddit: extract(reddit).length,
         Craigslist: extract(craigslist).length,
         'X (Twitter)': extract(x).length,
-        Nextdoor: extract(nextdoor).length,
-        Google: extract(google).length,
+        Web: extract(web).length,
       },
+      locationCluster: cluster,
     });
-
   } catch (err) {
     console.error('Search failed:', err.message);
     return res.status(500).json({ error: err.message });
@@ -783,10 +645,15 @@ app.post('/api/search', async (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', message: 'BuyerRadar — domain blacklist + strict scoring active' });
+  res.json({
+    status: 'ok',
+    message: 'BuyerRadar — no API keys required, DuckDuckGo powered',
+    platforms: ['Reddit', 'Craigslist', 'X (Twitter)', 'Web (DuckDuckGo)'],
+  });
 });
 
 app.listen(PORT, () => {
   console.log(`\n◉ BuyerRadar backend running on http://localhost:${PORT}`);
+  console.log(`◉ No API keys required!`);
   console.log(`◉ Health check: http://localhost:${PORT}/api/health\n`);
 });

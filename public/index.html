@@ -55,6 +55,11 @@ select option{background:#060d1a}
 .btn-main:hover:not(:disabled){background:linear-gradient(135deg,#005070,#002040,#003a5a);box-shadow:0 0 24px rgba(0,212,255,.3)}
 .btn-main:disabled{opacity:.3;cursor:not-allowed}
 .g{color:#00ff88;margin:0 5px}
+.mode-toggle{display:flex;gap:0;margin-bottom:16px;border:1px solid rgba(0,212,255,.25);overflow:hidden}
+.mode-btn{flex:1;padding:10px;background:transparent;border:none;color:rgba(0,212,255,.45);font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.12em;text-transform:uppercase;cursor:pointer;transition:all .2s;text-align:center}
+.mode-btn.active{background:linear-gradient(135deg,#003d5c,#001d36);color:#00d4ff;box-shadow:inset 0 0 12px rgba(0,212,255,.1)}
+.mode-btn:first-child{border-right:1px solid rgba(0,212,255,.25)}
+.commercial-hint{font-family:'Share Tech Mono',monospace;font-size:10px;color:rgba(255,165,0,.6);padding:8px 12px;border-left:2px solid rgba(255,165,0,.3);background:rgba(255,165,0,.04);margin-bottom:12px;display:none;line-height:1.8}
 #scanPanel{display:none}
 .prog-wrap{height:3px;background:rgba(0,212,255,.1);margin:12px 0 14px;overflow:hidden}
 .prog-bar{height:3px;background:linear-gradient(90deg,#00d4ff,#00ff88);width:0%;transition:width .4s ease;box-shadow:0 0 8px #00d4ff}
@@ -98,40 +103,47 @@ a.post-link:hover{background:rgba(0,212,255,.05);border-left-color:#00d4ff}
 </head>
 <body>
 <div class="wrap">
- 
-<!-- HEADER -->
+
 <div class="panel bl br">
   <div style="display:flex;align-items:center;justify-content:space-between;padding-bottom:10px;margin-bottom:14px;border-bottom:1px solid rgba(0,212,255,.12)">
-    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(0,212,255,.35)">SYS.v5.0 // BUYERRADAR</span>
+    <span style="font-family:'Share Tech Mono',monospace;font-size:10px;letter-spacing:.15em;text-transform:uppercase;color:rgba(0,212,255,.35)">SYS.v7.0 // BUYERRADAR</span>
     <div style="display:flex;gap:6px">
       <div class="orb" style="background:radial-gradient(circle at 35% 35%,#ff6314,#aa3308)"></div>
       <div class="orb" style="background:radial-gradient(circle at 35% 35%,#a855f7,#6622cc);animation-delay:.4s"></div>
       <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00ff88,#008844);animation-delay:.8s"></div>
-      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#f472b6,#cc2678);animation-delay:1.2s"></div>
-      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.6s"></div>
-      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:2s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.2s"></div>
+      <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:1.6s"></div>
     </div>
   </div>
   <h1>BUYER<span>RADAR</span></h1>
-  <p class="sub">LIVE BUYER POST SCANNER · LOCAL RADIUS · 6 PLATFORMS · A product by Devin Backman</p>
+  <p class="sub">LIVE BUYER POST SCANNER · LOCAL RADIUS · 4 PLATFORMS · A product by Devin Backman</p>
   <p class="tagline">▸ Enter what you're selling. We find real posts where people say "I'm looking for this."</p>
   <div class="orbs">
     <div class="orb" style="background:radial-gradient(circle at 35% 35%,#ff6314,#aa3308)"></div>
     <div class="orb" style="background:radial-gradient(circle at 35% 35%,#a855f7,#6622cc);animation-delay:.4s"></div>
     <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00ff88,#008844);animation-delay:.8s"></div>
-    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#f472b6,#cc2678);animation-delay:1.2s"></div>
-    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.6s"></div>
-    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:2s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#e7e7e7,#999);animation-delay:1.2s"></div>
+    <div class="orb" style="background:radial-gradient(circle at 35% 35%,#00d4ff,#0066aa);animation-delay:1.6s"></div>
     <div style="flex:1;height:1px;background:linear-gradient(90deg,rgba(0,212,255,.25),transparent);margin-left:6px"></div>
   </div>
 </div>
- 
-<!-- SEARCH FORM -->
+
 <div class="panel bl br">
   <div class="fl">
     <div class="bar" style="background:#00ff88;box-shadow:0 0 6px #00ff88"></div>
     WHAT ARE YOU SELLING?
   </div>
+
+  <div class="mode-toggle">
+    <button class="mode-btn active" id="btnGeneral" onclick="setMode('general')">◈ General Mode</button>
+    <button class="mode-btn" id="btnCommercial" onclick="setMode('commercial')">◈ Commercial Kitchen Mode</button>
+  </div>
+
+  <div class="commercial-hint" id="commercialHint">
+    ▸ Commercial Kitchen Mode active — targeting restaurant owners, caterers, and food service operators.<br>
+    ▸ Tip: Enter the specific equipment (e.g. "commercial mixer", "walk-in cooler", "convection oven")
+  </div>
+
   <div class="row">
     <div class="field">
       <label>▸ Your Location <span class="lhint">(city + state, or ZIP code)</span></label>
@@ -156,8 +168,7 @@ a.post-link:hover{background:rgba(0,212,255,.05);border-left-color:#00d4ff}
     <span class="g">◉</span>SCAN FOR BUYERS<span class="g">◉</span>
   </button>
 </div>
- 
-<!-- SCAN PROGRESS -->
+
 <div class="panel bl br" id="scanPanel">
   <div class="fl">
     <div class="bar" style="background:#00d4ff;box-shadow:0 0 6px #00d4ff"></div>
@@ -166,8 +177,7 @@ a.post-link:hover{background:rgba(0,212,255,.05);border-left-color:#00d4ff}
   <div class="prog-wrap"><div class="prog-bar" id="progBar"></div></div>
   <div id="logLines"></div>
 </div>
- 
-<!-- RESULTS -->
+
 <div class="panel bl br" id="resultsPanel">
   <div class="fl">
     <div class="bar" style="background:#00ff88;box-shadow:0 0 6px #00ff88"></div>
@@ -179,52 +189,60 @@ a.post-link:hover{background:rgba(0,212,255,.05);border-left-color:#00d4ff}
   </div>
   <div id="resBody"></div>
 </div>
- 
-<div class="foot">◈ A product by Devin Backman // v5.0.0 ◈</div>
+
+<div class="foot">◈ A product by Devin Backman // v7.0.0 ◈</div>
 </div>
- 
+
 <script>
-// ══════════════════════════════════════════════════════════════
-// BUYERRADAR FRONTEND v5.0 — talks to local backend
-// ══════════════════════════════════════════════════════════════
- 
+let currentMode = 'general';
+
+function setMode(mode) {
+  currentMode = mode;
+  document.getElementById('btnGeneral').classList.toggle('active', mode === 'general');
+  document.getElementById('btnCommercial').classList.toggle('active', mode === 'commercial');
+  document.getElementById('commercialHint').style.display = mode === 'commercial' ? 'block' : 'none';
+  document.getElementById('itm').placeholder = mode === 'commercial'
+    ? 'e.g. commercial mixer, convection oven, walk-in cooler'
+    : 'e.g. skateboard, guitar, camera';
+}
+
 function hl(text, item) {
   if (!text || !item) return text || '';
   const escaped = item.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   return text.replace(new RegExp(`(${escaped})`, 'gi'), '<em>$1</em>');
 }
- 
+
 function renderResults(posts, item) {
   const body = document.getElementById('resBody');
   body.innerHTML = '';
- 
+
   if (!posts.length) {
     body.innerHTML = `<div class="no-res">
       ◈ No buyer posts found for this search.<br><br>
       Suggestions:<br>
-      · Try a simpler item name (e.g. "guitar" instead of "Fender Stratocaster")<br>
+      · Try a simpler item name (e.g. "mixer" instead of "Hobart commercial mixer")<br>
       · Try just the city name without state<br>
-      · Select a larger radius or Nationwide<br>
-      · Some platforms restrict posts from appearing in search results
+      · Select Nationwide to search across all areas<br>
+      · In Commercial Kitchen Mode, try adding "commercial" to your item name
     </div>`;
     document.getElementById('resCount').textContent = '0 POSTS FOUND';
     return;
   }
- 
+
   document.getElementById('resCount').textContent =
     `${posts.length} BUYER POST${posts.length !== 1 ? 'S' : ''} FOUND`;
- 
+
   const groups = {};
   posts.forEach(p => {
     if (!groups[p.platform]) groups[p.platform] = [];
     groups[p.platform].push(p);
   });
- 
+
   Object.entries(groups).forEach(([platformName, plist]) => {
     const color = plist[0].color;
     const wrap = document.createElement('div');
     wrap.className = 'pgrp';
- 
+
     const hdr = document.createElement('div');
     hdr.className = 'pgrp-hdr open';
     hdr.innerHTML =
@@ -232,15 +250,14 @@ function renderResults(posts, item) {
       `<span class="pgrp-name" style="color:${color}">${platformName}</span>` +
       `<span class="pgrp-cnt">${plist.length} POST${plist.length !== 1 ? 'S' : ''}</span>` +
       `<span class="pgrp-chev">▶</span>`;
- 
+
     const bdy = document.createElement('div');
     bdy.className = 'pgrp-body open';
- 
+
     plist.forEach(post => {
       const card = document.createElement('div');
       card.className = 'post-card';
       const shortUrl = post.url.replace(/^https?:\/\/(www\.)?/, '').slice(0, 85);
- 
       card.innerHTML =
         `<div class="post-top">` +
           `<span class="post-tag" style="color:${color};border-color:${color}55;background:${color}11">${platformName}</span>` +
@@ -251,22 +268,21 @@ function renderResults(posts, item) {
           (post.snippet ? `<div class="post-snip">${hl(post.snippet, item)}</div>` : '') +
           `<div class="post-url">↗ ${shortUrl}</div>` +
         `</a>`;
- 
       bdy.appendChild(card);
     });
- 
+
     hdr.onclick = () => {
       const isOpen = bdy.classList.contains('open');
       bdy.classList.toggle('open', !isOpen);
       hdr.classList.toggle('open', !isOpen);
     };
- 
+
     wrap.appendChild(hdr);
     wrap.appendChild(bdy);
     body.appendChild(wrap);
   });
 }
- 
+
 function addLog(iconHtml, text, cls) {
   const d = document.createElement('div');
   d.className = 'log-line';
@@ -275,62 +291,65 @@ function addLog(iconHtml, text, cls) {
   d.scrollIntoView({ block: 'nearest' });
   return d;
 }
- 
+
 function setProgress(pct) {
   document.getElementById('progBar').style.width = pct + '%';
 }
- 
+
 let scanning = false;
- 
+
 async function startScan() {
   if (scanning) return;
- 
+
   const loc    = document.getElementById('loc').value.trim();
   const item   = document.getElementById('itm').value.trim();
   const radius = document.getElementById('radius').value;
   if (!loc || !item) return;
- 
+
   scanning = true;
   document.getElementById('scanBtn').disabled = true;
-  document.getElementById('scanBtn').innerHTML =
-    '<span class="g">◉</span>SCANNING...<span class="g">◉</span>';
- 
+  document.getElementById('scanBtn').innerHTML = '<span class="g">◉</span>SCANNING...<span class="g">◉</span>';
+
   const sp = document.getElementById('scanPanel');
   sp.style.display = 'block';
   document.getElementById('logLines').innerHTML = '';
   document.getElementById('resultsPanel').style.display = 'none';
   setProgress(0);
- 
+
+  const modeLabel = currentMode === 'commercial' ? ' · COMMERCIAL KITCHEN MODE' : '';
   document.getElementById('scanTitle').textContent =
-    `SCANNING: "${item.toUpperCase()}" · ` +
-    (radius === '100' ? 'NATIONWIDE' : `${loc.toUpperCase()} · ${radius} MI RADIUS`);
+    `SCANNING: "${item.toUpperCase()}" · ${loc.toUpperCase()}${modeLabel}`;
   sp.scrollIntoView({ behavior: 'smooth', block: 'start' });
- 
-  const platforms = ['Reddit', 'Craigslist', 'X (Twitter)', 'OfferUp', 'Nextdoor', 'Google'];
+
+  if (currentMode === 'commercial') {
+    addLog('◈', 'Commercial Kitchen Mode — targeting restaurant owners, caterers, and food service operators', 'c-ok');
+  }
+
+  const platforms = ['Reddit', 'Craigslist', 'X (Twitter)', 'Web'];
   const lines = {};
   platforms.forEach((p, i) => {
     lines[p] = addLog('<span class="spin">◌</span>', `[${p}] Scanning for buyers...`, 'c-wait');
-    setProgress(5 + i * 10);
+    setProgress(5 + i * 15);
   });
- 
-  setProgress(20)
-  addLog('◈', 'All 6 platforms queued — awaiting results...', 'c-ok');
- 
+
+  setProgress(25);
+  addLog('◈', 'All 4 platforms queued — awaiting results...', 'c-ok');
+
   try {
-    const res = await fetch('https://buyerradar.onrender.com/api/search', {
+    const res = await fetch('https://buyerradar-production.up.railway.app/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ item, location: loc, radius }),
+      body: JSON.stringify({ item, location: loc, radius, mode: currentMode }),
     });
- 
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       throw new Error(err.error || `Server error ${res.status}`);
     }
- 
+
     const data = await res.json();
     setProgress(100);
- 
+
     platforms.forEach(p => {
       const count = data.counts?.[p] || 0;
       if (count > 0) {
@@ -339,37 +358,37 @@ async function startScan() {
           `<span>[${p}] — <span style="color:#00ff88">${count} buyer post${count !== 1 ? 's' : ''} found</span></span>`;
       } else {
         lines[p].innerHTML =
-          `<span class="c-dim">◦</span>` +
-          `<span class="c-dim">[${p}] — no posts found</span>`;
+          `<span class="c-dim">◦</span><span class="c-dim">[${p}] — no posts found</span>`;
       }
     });
- 
+
+    // Show location cluster if returned
+    if (data.locationCluster && data.locationCluster.length > 1) {
+      addLog('◈', `Location cluster: ${data.locationCluster.join(', ')}`, 'c-dim');
+    }
+
     const found = data.results.length;
     document.getElementById('scanTitle').textContent =
       `SCAN COMPLETE — ${found} UNIQUE BUYER POST${found !== 1 ? 'S' : ''} FOUND`;
-    addLog('◈',
-      `Done. ${found} unique buyer posts surfaced. Click any result to open the original post.`,
-      'c-ok');
- 
+    addLog('◈', `Done. ${found} unique buyer posts surfaced. Click any result to open the original post.`, 'c-ok');
+
     document.getElementById('resLabel').textContent =
-      `SELLING: ${item.toUpperCase()} · ` +
-      (radius === '100' ? 'NATIONWIDE' : `NEAR: ${loc.toUpperCase()} · ${radius} MI`);
+      `SELLING: ${item.toUpperCase()} · NEAR: ${loc.toUpperCase()}${modeLabel}`;
     document.getElementById('resultsPanel').style.display = 'block';
     renderResults(data.results, item);
     document.getElementById('resultsPanel').scrollIntoView({ behavior: 'smooth', block: 'start' });
- 
+
   } catch (err) {
     setProgress(100);
     addLog('✗', `Error: ${err.message}`, 'c-err');
-    addLog('◈', 'Make sure the backend server is running (node server.js)', 'c-dim');
+    addLog('◈', 'Make sure the backend server is running', 'c-dim');
   }
- 
+
   scanning = false;
-  document.getElementById('scanBtn').innerHTML =
-    '<span class="g">◉</span>SCAN FOR BUYERS<span class="g">◉</span>';
+  document.getElementById('scanBtn').innerHTML = '<span class="g">◉</span>SCAN FOR BUYERS<span class="g">◉</span>';
   checkReady();
 }
- 
+
 function checkReady() {
   const loc = document.getElementById('loc').value.trim();
   const itm = document.getElementById('itm').value.trim();
@@ -378,4 +397,3 @@ function checkReady() {
 </script>
 </body>
 </html>
- 
