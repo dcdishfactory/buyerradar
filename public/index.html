@@ -336,7 +336,7 @@ async function startScan() {
   addLog('◈', 'All 4 platforms queued — awaiting results...', 'c-ok');
 
   try {
-    const res = await fetch('https://buyerradar-production.up.railway.app/api/search', {
+    const res = await fetch('https://buyerradar.onrender.com/api/search', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ item, location: loc, radius, mode: currentMode }),
