@@ -8,7 +8,7 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors({
-  origin: 'https://buyerradar-production.up.railway.app',
+  origin: 'https://buyerradar.onrender.com',
   methods: ['GET', 'POST'],
 }));
 app.use(express.json());
